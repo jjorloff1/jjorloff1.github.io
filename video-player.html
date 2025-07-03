@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Japanese Videos</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .grid { display: flex; flex-wrap: wrap; gap: 20px; }
+    .video-card { border: 1px solid #ccc; padding: 10px; width: 250px; position: relative; background: #f9f9f9; border-radius: 8px; }
+    .played-indicator { position: absolute; top: 5px; right: 5px; background: green; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; display: none; }
+    .video-info { font-size: 14px; margin-top: 8px; }
+    .thumbnail { cursor: pointer; width: 100%; }
+    .played-toggle { margin-top: 8px; display: flex; align-items: center; gap: 5px; }
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0, 0, 0, 0.7); }
+    .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 600px; border-radius: 8px; position: relative; }
+    .close { color: #aaa; position: absolute; top: -4px; right: 2px; font-size: 28px; font-weight: bold; cursor: pointer; }
+    iframe { width: 100%; height: 315px; }
+    .controls { margin: 20px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .filters input { width: 5em; }
+  </style>
+</head>
+<body>
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+  <h1>Japanese Videos</h1>
+  <div id="playedDuration" style="font-size: 1.2em; font-weight: bold;">Total Played Time: 0:00:00 | Played Today: 0:00:00</div>
+</div>
+  <p><em>Tip: If video playback fails, please use a local server (e.g., Live Server in VS Code) instead of opening via <code>file://</code>.</em></p>
+  <div class="controls">
+    <input type="file" id="csvFile" accept=".csv">
+    <label><input type="checkbox" id="hidePlayed" aria-checked="true" checked="checked"> Hide Played</label>
+    <button id="downloadPlayed">Download Played Videos</button>
+    <input type="file" id="uploadPlayed" accept=".json">
+    <label><input type="checkbox" id="showExcluded"> Show Excluded Only</label>
+    <button id="downloadExcluded">Download Excluded Videos</button>
+    <input type="file" id="uploadExcluded" accept=".json">
+  </div>
+
+  <div class="filters">
+    <label>Channel:
+      <select id="filterChannel" multiple size="2" style="min-width: 150px;"></select>
+    </label>
+    <label>Min Duration (s): <input type="number" id="filterMinDuration"></label>
+    <label>Max Duration (s): <input type="number" id="filterMaxDuration"></label>
+    <label>Min Raw Score: <input type="number" id="filterMinRaw" step="1"></label>
+    <label>Max Raw Score: <input type="number" id="filterMaxRaw" step="1"></label>
+    <label>Min Scaled Score: <input type="number" id="filterMinScaled" step="1"></label>
+    <label>Max Scaled Score: <input type="number" id="filterMaxScaled" step="1"></label>
+
+    <button id="clearFilters">Clear All Filters</button>
+  </div>
+
+  <div class="grid" id="videoGrid"></div>
+
+  <div id="videoModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <div id="video-player"></div>
+    </div>
+  </div>
+
+  <script>
+    let allVideoData = [];
+    let filteredVideoData = [];
+    let currentRenderIndex = 0;
+    const BATCH_SIZE = 30;
+
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      const headers = lines[0].split(',');
+      return lines.slice(1).map(line => {
+        const values = line.split(',');
+        return headers.reduce((obj, header, i) => {
+          obj[header.trim()] = values[i].trim();
+          return obj;
+        }, {});
+      });
+    }
+
+    function markAsPlayed(videoId) {
+      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
+      played[videoId] = { played: true, timestamp: new Date().toISOString() };
+      localStorage.setItem('playedVideos', JSON.stringify(played));
+      updatePlayedIndicators(videoId);
+    }
+
+    function unmarkAsPlayed(videoId) {
+      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
+      delete played[videoId];
+      localStorage.setItem('playedVideos', JSON.stringify(played));
+      updatePlayedIndicators(videoId);
+    }
+
+    function isPlayed(videoId) {
+      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
+      return played[videoId];
+    }
+
+    function updatePlayedIndicators(videoId) {
+      updatePlayedTimeDisplay();
+      document.querySelectorAll(`.video-card[data-id="${videoId}"] .played-indicator`).forEach(el => {
+        el.style.display = isPlayed(videoId) ? 'block' : 'none';
+      });
+      const toggle = document.getElementById(`toggle-${videoId}`);
+      if (toggle) toggle.checked = isPlayed(videoId);
+    }
+
+    function renderPlayer(videoId) {
+      const container = document.getElementById('video-player');
+      container.innerHTML = '';
+
+      const indicator = document.createElement('div');
+      indicator.className = 'played-indicator';
+      indicator.style.display = isPlayed(videoId) ? 'block' : 'none';
+      indicator.textContent = 'Played';
+
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+      iframe.setAttribute('frameborder', '0');
+      iframe.setAttribute('allowfullscreen', '');
+      iframe.setAttribute('allow', 'autoplay; encrypted-media');
+
+      const toggleWrap = document.createElement('div');
+      toggleWrap.className = 'played-toggle';
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox';
+      toggle.id = `toggle-${videoId}`;
+      toggle.checked = isPlayed(videoId);
+      toggle.onchange = () => {
+        if (toggle.checked) {
+          markAsPlayed(videoId);
+          if (document.getElementById('hidePlayed').checked) {
+            fadeOutVideoCard(document.querySelector(`[data-id="${videoId}"]`), "Video marked as played. ", () => {
+              unmarkAsPlayed(videoId);
+              renderGrid(allVideoData);
+            });
+          }
+        } else {
+          unmarkAsPlayed(videoId);
+        }
+      };
+      const label = document.createElement('label');
+      label.htmlFor = `toggle-${videoId}`;
+      label.textContent = 'Played';
+      toggleWrap.appendChild(toggle);
+      toggleWrap.appendChild(label);
+
+      container.appendChild(indicator);
+      container.appendChild(iframe);
+      container.appendChild(toggleWrap);
+      document.getElementById('videoModal').style.display = 'block';
+    }
+
+    function closeModal() {
+      document.getElementById('videoModal').style.display = 'none';
+      document.getElementById('video-player').innerHTML = '';
+    }
+
+    window.onclick = function(event) {
+      const modal = document.getElementById('videoModal');
+      if (event.target == modal) closeModal();
+    }
+
+    function renderNextBatch() {
+      const grid = document.getElementById('videoGrid');
+      const end = Math.min(currentRenderIndex + BATCH_SIZE, filteredVideoData.length);
+      for (let i = currentRenderIndex; i < end; i++) {
+        grid.appendChild(createVideoCard(filteredVideoData[i]));
+      }
+      currentRenderIndex = end;
+    }
+
+    function renderGrid(data) {
+      const showExcluded = document.getElementById('showExcluded').checked;
+      const hidePlayed = document.getElementById('hidePlayed').checked;
+      const selectedChannels = Array.from(document.getElementById('filterChannel').selectedOptions).map(opt => opt.value);
+      const minDuration = parseInt(document.getElementById('filterMinDuration').value, 10);
+      const maxDuration = parseInt(document.getElementById('filterMaxDuration').value, 10);
+      const minRaw = parseFloat(document.getElementById('filterMinRaw').value);
+      const maxRaw = parseFloat(document.getElementById('filterMaxRaw').value);
+      const minScaled = parseFloat(document.getElementById('filterMinScaled').value);
+      const maxScaled = parseFloat(document.getElementById('filterMaxScaled').value);
+
+      filteredVideoData = data.filter(video => {
+        if (!showExcluded && isExcluded(video.video_id)) return false;
+        if (showExcluded && !isExcluded(video.video_id)) return false;
+        if (hidePlayed && isPlayed(video.video_id)) return false;
+        if (selectedChannels.length && !selectedChannels.includes(video.channel_id)) return false;
+        const dur = parseInt(video.duration, 10);
+        if (!isNaN(minDuration) && dur < minDuration) return false;
+        if (!isNaN(maxDuration) && dur > maxDuration) return false;
+        const raw = parseFloat(video.raw_difficulty_score);
+        if (!isNaN(minRaw) && raw < minRaw) return false;
+        if (!isNaN(maxRaw) && raw > maxRaw) return false;
+        const scaled = parseFloat(video.scaled_difficulty_score);
+        if (!isNaN(minScaled) && scaled < minScaled) return false;
+        if (!isNaN(maxScaled) && scaled > maxScaled) return false;
+        
+        return true;
+      });
+
+      currentRenderIndex = 0;
+      const grid = document.getElementById('videoGrid');
+      grid.innerHTML = '';
+      renderNextBatch();
+      updatePlayedTimeDisplay();
+    }
+
+    function fadeOutVideoCard(card, undoMessage, undoAction) {
+      card.style.transition = 'opacity 0.5s';
+      card.style.opacity = 0;
+      setTimeout(() => {
+        card.remove();
+        const undoBar = document.createElement('div');
+        undoBar.textContent = undoMessage;
+        const undoBtn = document.createElement('button');
+        undoBtn.textContent = 'Undo';
+        undoBtn.onclick = () => {
+          undoAction()
+          undoBar.remove();
+        };
+        undoBar.appendChild(undoBtn);
+        undoBar.style.position = 'fixed';
+        undoBar.style.bottom = '20px';
+        undoBar.style.left = '50%';
+        undoBar.style.transform = 'translateX(-50%)';
+        undoBar.style.background = '#333';
+        undoBar.style.color = '#fff';
+        undoBar.style.padding = '10px 20px';
+        undoBar.style.borderRadius = '8px';
+        undoBar.style.zIndex = '1001';
+        document.body.appendChild(undoBar);
+        setTimeout(() => undoBar.remove(), 10000);
+      }, 500);
+    }
+
+    function createVideoCard(video) {
+      const card = document.createElement('div');
+      card.className = 'video-card';
+      card.dataset.id = video.video_id;
+
+      const img = document.createElement('img');
+      img.src = `https://img.youtube.com/vi/${video.video_id}/0.jpg`;
+      img.className = 'thumbnail';
+      img.onclick = () => renderPlayer(video.video_id);
+      card.appendChild(img);
+
+      const durationSeconds = parseInt(video.duration, 10);
+      const minutes = Math.floor(durationSeconds / 60);
+      const seconds = durationSeconds % 60;
+      const durationFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+      const info = document.createElement('div');
+      info.className = 'video-info';
+      info.innerHTML = `
+        <strong>${video.channel_id}</strong><br>
+        <strong>${video.video_id}</strong><br>
+        Duration: ${durationFormatted}<br>
+        Raw Score: ${video.raw_difficulty_score}<br>
+        Scaled Score: ${video.scaled_difficulty_score}
+      `;
+      card.appendChild(info);
+
+      const toggleWrap = document.createElement('div');
+      toggleWrap.className = 'played-toggle';
+
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox';
+      toggle.id = `toggle-${video.video_id}`;
+      toggle.checked = isPlayed(video.video_id);
+      toggle.onchange = () => {
+        if (toggle.checked) {
+          markAsPlayed(video.video_id);
+          if (document.getElementById('hidePlayed').checked) {
+            fadeOutVideoCard(card, "Video marked as played. ", () => {
+              unmarkAsPlayed(video.video_id);
+              renderGrid(allVideoData);
+            });
+          }
+        } else {
+          unmarkAsPlayed(video.video_id);
+        }
+      };
+      const label = document.createElement('label');
+      label.htmlFor = `toggle-${video.video_id}`;
+      label.textContent = 'Played';
+      toggleWrap.appendChild(toggle);
+      toggleWrap.appendChild(label);
+
+      const excludeToggle = document.createElement('input');
+      excludeToggle.type = 'checkbox';
+      excludeToggle.id = `exclude-${video.video_id}`;
+      excludeToggle.checked = isExcluded(video.video_id);
+      excludeToggle.onchange = () => {
+        if (excludeToggle.checked) {
+          markAsExcluded(video.video_id);
+          if (!document.getElementById('showExcluded').checked) {
+            fadeOutVideoCard(card, "Video excluded. ", () => {
+              unmarkAsExcluded(video.video_id);
+              renderGrid(allVideoData);
+            });
+          }
+        } else {
+          unmarkAsExcluded(video.video_id);
+        }
+      };
+      const excludeLabel = document.createElement('label');
+      excludeLabel.htmlFor = `exclude-${video.video_id}`;
+      excludeLabel.textContent = 'Exclude';
+      toggleWrap.appendChild(excludeToggle);
+      toggleWrap.appendChild(excludeLabel);
+
+      card.appendChild(toggleWrap);
+
+      const badge = document.createElement('div');
+      badge.className = 'played-indicator';
+      badge.textContent = 'Played';
+      badge.style.display = isPlayed(video.video_id) ? 'block' : 'none';
+      card.appendChild(badge);
+
+      return card;
+    }
+
+    const filterInputs = document.querySelectorAll('.filters input, .filters select');
+    const durationDisplay = document.getElementById('playedDuration');
+    filterInputs.forEach(input => input.addEventListener('input', () => renderGrid(allVideoData)));
+   
+    document.getElementById('hidePlayed').addEventListener('change', () => renderGrid(allVideoData));
+
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      localStorage.setItem('lastUsedFilename', file.name);
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        allVideoData = parseCSV(event.target.result);
+        populateChannelFilter(allVideoData);
+        allVideoData.sort((a, b) => parseFloat(a.raw_difficulty_score) - parseFloat(b.raw_difficulty_score));
+        renderGrid(allVideoData);
+      };
+      reader.readAsText(file);
+    });
+    
+    document.getElementById('hidePlayed').addEventListener('change', () => renderGrid(allVideoData));
+
+    document.getElementById('downloadPlayed').addEventListener('click', () => {
+      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
+      const blob = new Blob([JSON.stringify(played, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'played_videos.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('uploadPlayed').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const data = JSON.parse(event.target.result);
+          localStorage.setItem('playedVideos', JSON.stringify(data));
+          if (allVideoData.length > 0) renderGrid(allVideoData);
+        } catch (err) {
+          alert('Invalid JSON file');
+        }
+      };
+      reader.readAsText(file);
+    });
+    
+    function updatePlayedTimeDisplay() {
+      const durationDisplay = document.getElementById('playedDuration');
+      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
+      let totalPlayedSeconds = 0;
+      let playedTodaySeconds = 0;
+      allVideoData.forEach(video => {
+        if (played[video.video_id]) {
+          totalPlayedSeconds += parseInt(video.duration, 10);
+          const playedDate = new Date(played[video.video_id].timestamp);
+          const today = new Date();
+          if (
+            playedDate.getFullYear() === today.getFullYear() &&
+            playedDate.getMonth() === today.getMonth() &&
+            playedDate.getDate() === today.getDate()
+          ) {
+            playedTodaySeconds += parseInt(video.duration, 10);
+          }
+        }
+      });
+      const hours = Math.floor(totalPlayedSeconds / 3600);
+      const minsRem = Math.floor((totalPlayedSeconds % 3600) / 60);
+      const secsRem = totalPlayedSeconds % 60;
+      const playedTodayHours = Math.floor(playedTodaySeconds / 3600);
+      const playedTodayMins = Math.floor((playedTodaySeconds % 3600) / 60);
+      const playedTodaySecs = playedTodaySeconds % 60;
+      durationDisplay.textContent = `Total Played Time: ${hours}:${minsRem.toString().padStart(2, '0')}:${secsRem.toString().padStart(2, '0')} | Played Today: ${playedTodayHours}:${playedTodayMins.toString().padStart(2, '0')}:${playedTodaySecs.toString().padStart(2, '0')}`;
+    }
+    
+    function markAsExcluded(videoId) {
+      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
+      excluded[videoId] = true;
+      localStorage.setItem('excludedVideos', JSON.stringify(excluded));
+    }
+
+    function unmarkAsExcluded(videoId) {
+      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
+      delete excluded[videoId];
+      localStorage.setItem('excludedVideos', JSON.stringify(excluded));
+    }
+
+    function isExcluded(videoId) {
+      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
+      return excluded[videoId];
+    }
+
+    document.getElementById('showExcluded').addEventListener('change', () => renderGrid(allVideoData));
+
+    document.getElementById('downloadExcluded').addEventListener('click', () => {
+      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
+      const videoIds = Object.keys(excluded);
+      const blob = new Blob([JSON.stringify(videoIds, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'excluded_videos.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('uploadExcluded').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const data = JSON.parse(event.target.result);
+          localStorage.setItem('excludedVideos', JSON.stringify(
+            data.reduce((acc, key) => {
+              acc[key] = true;
+              return acc;
+            }, {})));
+          if (allVideoData.length > 0) renderGrid(allVideoData);
+        } catch (err) {
+          alert('Invalid JSON file');
+        }
+      };
+      reader.readAsText(file);
+    });
+    
+    function populateChannelFilter(data) {
+      const channelSelect = document.getElementById('filterChannel');
+      const channels = [...new Set(data.map(v => v.channel_id))].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+      channelSelect.innerHTML = '';
+      channels.forEach(channel => {
+        const option = document.createElement('option');
+        option.value = channel;
+        option.textContent = channel;
+        channelSelect.appendChild(option);
+      });
+    }
+
+    document.getElementById('filterChannel').addEventListener('change', () => renderGrid(allVideoData));
+    document.getElementById('clearFilters').addEventListener('click', () => {
+      document.getElementById('filterChannel').selectedIndex = -1;
+      document.getElementById('filterMinDuration').value = '';
+      document.getElementById('filterMaxDuration').value = '';
+      document.getElementById('filterMinRaw').value = '';
+      document.getElementById('filterMaxRaw').value = '';
+      document.getElementById('filterMinScaled').value = '';
+      document.getElementById('filterMaxScaled').value = '';
+      renderGrid(allVideoData);
+    });
+
+    window.addEventListener('scroll', () => {
+      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
+        renderNextBatch();
+      }
+    });
+</script>
+</body>
+</html>
