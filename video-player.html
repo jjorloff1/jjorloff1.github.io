@@ -59,6 +59,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script>
     let allVideoData = [];
     let filteredVideoData = [];
@@ -66,15 +67,11 @@
     const BATCH_SIZE = 30;
 
     function parseCSV(text) {
-      const lines = text.trim().split('\n');
-      const headers = lines[0].split(',');
-      return lines.slice(1).map(line => {
-        const values = line.split(',');
-        return headers.reduce((obj, header, i) => {
-          obj[header.trim()] = values[i].trim();
-          return obj;
-        }, {});
-      });
+      return Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true
+      }).data;
     }
 
     function markAsPlayed(videoId) {
@@ -253,8 +250,9 @@
       const info = document.createElement('div');
       info.className = 'video-info';
       info.innerHTML = `
-        <strong>${video.channel_id}</strong><br>
-        <strong>${video.video_id}</strong><br>
+        <strong>${video.title}</strong><br>
+        <em>${video.channel_id}</em><br>
+        <em>${video.video_id}</em><br>
         Duration: ${durationFormatted}<br>
         Raw Score: ${video.raw_difficulty_score}<br>
         Scaled Score: ${video.scaled_difficulty_score}
