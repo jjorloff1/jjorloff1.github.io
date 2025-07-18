@@ -7,6 +7,13 @@
     body { font-family: Arial, sans-serif; padding: 20px; }
     .grid { display: flex; flex-wrap: wrap; gap: 20px; }
     .video-card { border: 1px solid #ccc; padding: 10px; width: 250px; position: relative; background: #f9f9f9; border-radius: 8px; }
+    .title-container { position: relative; width: 100%; }
+    .card-title { font-size: .8rem; line-height: 1.3; height: 2.08rem; /* fixed height for 2 lines */ display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; cursor: pointer; }
+    .title-container .tooltip { display: none; position: absolute; top: 100%; left: 0; z-index: 10; background-color: rgba(0, 0, 0, 0.85); color: white; padding: 6px 10px; border-radius: 4px; max-width: 300px; font-size: 0.85rem; white-space: normal; margin-top: 4px; }
+    .title-container:hover .tooltip { display: block; }
+    .video-wrapper { position: relative; display: inline-block; }
+    .video-wrapper .thumbnail { display: block; width: 100%; height: auto; }
+    .video-duration { position: absolute; bottom: 8px; right: 8px; background-color: rgba(0, 0, 0, 0.6); color: white; padding: 2px 6px; font-size: 0.75rem; border-radius: 3px; pointer-events: none; }
     .played-indicator { position: absolute; top: 5px; right: 5px; background: green; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; display: none; }
     .video-info { font-size: 14px; margin-top: 8px; }
     .thumbnail { cursor: pointer; width: 100%; }
@@ -236,26 +243,41 @@
       card.className = 'video-card';
       card.dataset.id = video.video_id;
 
-      const img = document.createElement('img');
-      img.src = `https://img.youtube.com/vi/${video.video_id}/0.jpg`;
-      img.className = 'thumbnail';
-      img.onclick = () => renderPlayer(video.video_id);
-      card.appendChild(img);
-
       const durationSeconds = parseInt(video.duration, 10);
       const minutes = Math.floor(durationSeconds / 60);
       const seconds = durationSeconds % 60;
       const durationFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
+      // Create a wrapper div for the image and duration overlay
+      const wrapper = document.createElement('div');
+      wrapper.className = 'video-wrapper';
+
+      // Create the thumbnail image
+      const img = document.createElement('img');
+      img.src = `https://img.youtube.com/vi/${video.video_id}/0.jpg`;
+      img.className = 'thumbnail';
+      img.onclick = () => renderPlayer(video.video_id);
+
+      // Create the duration overlay
+      const durationOverlay = document.createElement('div');
+      durationOverlay.className = 'video-duration';
+      durationOverlay.textContent = durationFormatted + " - " + video.scaled_difficulty_score; // e.g., '3:45 - 11'
+
+      // Assemble the elements
+      wrapper.appendChild(img);
+      wrapper.appendChild(durationOverlay);
+      card.appendChild(wrapper); // Add wrapper (with image + duration) to the card
+
       const info = document.createElement('div');
       info.className = 'video-info';
       info.innerHTML = `
-        <strong>${video.title}</strong><br>
+        <div class="title-container">
+          <h3 class="card-title">${video.title}</h3>
+          <div class="tooltip">${video.title}</div>
+        </div>
         <em>${video.channel_id}</em><br>
         <em>${video.video_id}</em><br>
-        Duration: ${durationFormatted}<br>
-        Raw Score: ${video.raw_difficulty_score}<br>
-        Scaled Score: ${video.scaled_difficulty_score}
+        <div>Raw Score: ${video.raw_difficulty_score}</div>
       `;
       card.appendChild(info);
 
