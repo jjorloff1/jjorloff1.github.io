@@ -24,7 +24,12 @@
     iframe { width: 100%; height: 315px; }
     .controls { margin: 20px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-    .filters input { width: 5em; }
+    .filters input { width: 5em;  margin: 2px}
+    .filterGroup {
+      height: 3rem;
+    }
+    #filterTitleIncludes, #filterTitleExcludes { width: 10em; height: 1rem }
+    #filterChannel { height: 3rem }
   </style>
 </head>
 <body>
@@ -45,14 +50,17 @@
 
   <div class="filters">
     <label>Channel:
-      <select id="filterChannel" multiple size="2" style="min-width: 150px;"></select>
+      <select id="filterChannel" multiple size="2.5rem" style="min-width: 220px;"></select>
     </label>
-    <label>Min Duration (s): <input type="number" id="filterMinDuration"></label>
-    <label>Max Duration (s): <input type="number" id="filterMaxDuration"></label>
-    <label>Min Raw Score: <input type="number" id="filterMinRaw" step="1"></label>
-    <label>Max Raw Score: <input type="number" id="filterMaxRaw" step="1"></label>
-    <label>Min Scaled Score: <input type="number" id="filterMinScaled" step="1"></label>
-    <label>Max Scaled Score: <input type="number" id="filterMaxScaled" step="1"></label>
+    <div class="filterGroup">
+      <input type="text" id="filterTitleIncludes" placeholder="Title includes..." /><br />
+      <input type="text" id="filterTitleExcludes" placeholder="Title excludes..." />
+    </div>
+    <label><input type="number" id="filterMinDuration"> - <input type="number" id="filterMaxDuration">(s) Duration</label>
+    <div class="filterGroup">
+      <label><input type="number" id="filterMinRaw" step="1"> - <input type="number" id="filterMaxRaw" step="1"> Raw Score</label><br />
+      <label><input type="number" id="filterMinScaled" step="1"> - <input type="number" id="filterMaxScaled" step="1"> Scaled Score</label>
+    </div>
 
     <button id="clearFilters">Clear All Filters</button>
   </div>
@@ -178,6 +186,8 @@
       const showExcluded = document.getElementById('showExcluded').checked;
       const hidePlayed = document.getElementById('hidePlayed').checked;
       const selectedChannels = Array.from(document.getElementById('filterChannel').selectedOptions).map(opt => opt.value);
+      const titleIncludes = document.getElementById('filterTitleIncludes').value.trim().toLowerCase();
+      const titleExcludes = document.getElementById('filterTitleExcludes').value.trim().toLowerCase();
       const minDuration = parseInt(document.getElementById('filterMinDuration').value, 10);
       const maxDuration = parseInt(document.getElementById('filterMaxDuration').value, 10);
       const minRaw = parseFloat(document.getElementById('filterMinRaw').value);
@@ -190,6 +200,8 @@
         if (showExcluded && !isExcluded(video.video_id)) return false;
         if (hidePlayed && isPlayed(video.video_id)) return false;
         if (selectedChannels.length && !selectedChannels.includes(video.channel_id)) return false;
+        if (titleIncludes && !(video.title || '').toLowerCase().includes(titleIncludes)) return false;
+        if (titleExcludes && (video.title || '').toLowerCase().includes(titleExcludes)) return false;
         const dur = parseInt(video.duration, 10);
         if (!isNaN(minDuration) && dur < minDuration) return false;
         if (!isNaN(maxDuration) && dur > maxDuration) return false;
@@ -236,6 +248,14 @@
         document.body.appendChild(undoBar);
         setTimeout(() => undoBar.remove(), 10000);
       }, 500);
+    }
+
+    function debounce(fn, delay) {
+      let timer;
+      return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+      };
     }
 
     function createVideoCard(video) {
@@ -343,7 +363,7 @@
 
     const filterInputs = document.querySelectorAll('.filters input, .filters select');
     const durationDisplay = document.getElementById('playedDuration');
-    filterInputs.forEach(input => input.addEventListener('input', () => renderGrid(allVideoData)));
+    filterInputs.forEach(input => input.addEventListener('input', debounce(() => renderGrid(allVideoData), 200)));
    
     document.getElementById('hidePlayed').addEventListener('change', () => renderGrid(allVideoData));
 
@@ -484,6 +504,8 @@
     document.getElementById('filterChannel').addEventListener('change', () => renderGrid(allVideoData));
     document.getElementById('clearFilters').addEventListener('click', () => {
       document.getElementById('filterChannel').selectedIndex = -1;
+      document.getElementById('filterTitleIncludes').value = '';
+      document.getElementById('filterTitleExcludes').value = '';
       document.getElementById('filterMinDuration').value = '';
       document.getElementById('filterMaxDuration').value = '';
       document.getElementById('filterMinRaw').value = '';
