@@ -43,7 +43,8 @@
     <label><input type="checkbox" id="hidePlayed" aria-checked="true" checked="checked"> Hide Played</label>
     <button id="downloadPlayed">Download Played Videos</button>
     <input type="file" id="uploadPlayed" accept=".json">
-    <label><input type="checkbox" id="showExcluded"> Show Excluded Only</label>
+    <label><input type="checkbox" id="showExcluded"> Show Excluded</label>
+    <label><input type="checkbox" id="showExcludedOnly"> Show Excluded Only</label>
     <button id="downloadExcluded">Download Excluded Videos</button>
     <input type="file" id="uploadExcluded" accept=".json">
   </div>
@@ -184,6 +185,7 @@
 
     function renderGrid(data) {
       const showExcluded = document.getElementById('showExcluded').checked;
+      const showExcludedOnly = document.getElementById('showExcludedOnly').checked;
       const hidePlayed = document.getElementById('hidePlayed').checked;
       const selectedChannels = Array.from(document.getElementById('filterChannel').selectedOptions).map(opt => opt.value);
       const titleIncludes = document.getElementById('filterTitleIncludes').value.trim().toLowerCase();
@@ -196,8 +198,8 @@
       const maxScaled = parseFloat(document.getElementById('filterMaxScaled').value);
 
       filteredVideoData = data.filter(video => {
-        if (!showExcluded && isExcluded(video.video_id)) return false;
-        if (showExcluded && !isExcluded(video.video_id)) return false;
+        if (!(showExcluded || showExcludedOnly) && isExcluded(video.video_id)) return false;
+        if (showExcludedOnly && !isExcluded(video.video_id)) return false;
         if (hidePlayed && isPlayed(video.video_id)) return false;
         if (selectedChannels.length && !selectedChannels.includes(video.channel_id)) return false;
         if (titleIncludes && !(video.title || '').toLowerCase().includes(titleIncludes)) return false;
@@ -334,7 +336,7 @@
       excludeToggle.onchange = () => {
         if (excludeToggle.checked) {
           markAsExcluded(video.video_id);
-          if (!document.getElementById('showExcluded').checked) {
+          if (!document.getElementById('showExcludedOnly').checked) {
             fadeOutVideoCard(card, "Video excluded. ", () => {
               unmarkAsExcluded(video.video_id);
               renderGrid(allVideoData);
@@ -456,6 +458,7 @@
     }
 
     document.getElementById('showExcluded').addEventListener('change', () => renderGrid(allVideoData));
+    document.getElementById('showExcludedOnly').addEventListener('change', () => renderGrid(allVideoData));
 
     document.getElementById('downloadExcluded').addEventListener('click', () => {
       const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
