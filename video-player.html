@@ -184,26 +184,30 @@
     }
 
     function renderGrid(data) {
-      const showExcluded = document.getElementById('showExcluded').checked;
-      const showExcludedOnly = document.getElementById('showExcludedOnly').checked;
-      const hidePlayed = document.getElementById('hidePlayed').checked;
-      const selectedChannels = Array.from(document.getElementById('filterChannel').selectedOptions).map(opt => opt.value);
-      const titleIncludes = document.getElementById('filterTitleIncludes').value.trim().toLowerCase();
-      const titleExcludes = document.getElementById('filterTitleExcludes').value.trim().toLowerCase();
-      const minDuration = parseInt(document.getElementById('filterMinDuration').value, 10);
-      const maxDuration = parseInt(document.getElementById('filterMaxDuration').value, 10);
-      const minRaw = parseFloat(document.getElementById('filterMinRaw').value);
-      const maxRaw = parseFloat(document.getElementById('filterMaxRaw').value);
-      const minScaled = parseFloat(document.getElementById('filterMinScaled').value);
-      const maxScaled = parseFloat(document.getElementById('filterMaxScaled').value);
+  const showExcluded = document.getElementById('showExcluded').checked;
+  const showExcludedOnly = document.getElementById('showExcludedOnly').checked;
+  const hidePlayed = document.getElementById('hidePlayed').checked;
+  const selectedChannels = Array.from(document.getElementById('filterChannel').selectedOptions).map(opt => opt.value);
+  // Split includes/excludes on comma, trim, and filter out empty strings
+  const titleIncludesArr = document.getElementById('filterTitleIncludes').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const titleExcludesArr = document.getElementById('filterTitleExcludes').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const minDuration = parseInt(document.getElementById('filterMinDuration').value, 10);
+  const maxDuration = parseInt(document.getElementById('filterMaxDuration').value, 10);
+  const minRaw = parseFloat(document.getElementById('filterMinRaw').value);
+  const maxRaw = parseFloat(document.getElementById('filterMaxRaw').value);
+  const minScaled = parseFloat(document.getElementById('filterMinScaled').value);
+  const maxScaled = parseFloat(document.getElementById('filterMaxScaled').value);
 
       filteredVideoData = data.filter(video => {
         if (!(showExcluded || showExcludedOnly) && isExcluded(video.video_id)) return false;
         if (showExcludedOnly && !isExcluded(video.video_id)) return false;
         if (hidePlayed && isPlayed(video.video_id)) return false;
         if (selectedChannels.length && !selectedChannels.includes(video.channel_id)) return false;
-        if (titleIncludes && !(video.title || '').toLowerCase().includes(titleIncludes)) return false;
-        if (titleExcludes && (video.title || '').toLowerCase().includes(titleExcludes)) return false;
+        const title = (video.title || '').toLowerCase();
+        // Title includes: must match ANY include
+        if (titleIncludesArr.length && !titleIncludesArr.some(inc => title.includes(inc))) return false;
+        // Title excludes: must NOT match ANY excludes
+        if (titleExcludesArr.length && titleExcludesArr.some(exc => title.includes(exc))) return false;
         const dur = parseInt(video.duration, 10);
         if (!isNaN(minDuration) && dur < minDuration) return false;
         if (!isNaN(maxDuration) && dur > maxDuration) return false;
@@ -213,7 +217,6 @@
         const scaled = parseFloat(video.scaled_difficulty_score);
         if (!isNaN(minScaled) && scaled < minScaled) return false;
         if (!isNaN(maxScaled) && scaled > maxScaled) return false;
-        
         return true;
       });
 
@@ -366,6 +369,69 @@
     const filterInputs = document.querySelectorAll('.filters input, .filters select');
     const durationDisplay = document.getElementById('playedDuration');
     filterInputs.forEach(input => input.addEventListener('input', debounce(() => renderGrid(allVideoData), 200)));
+
+    // Restore filter values from localStorage
+    function restoreFilterValues() {
+      const filterMap = {
+        filterTitleIncludes: 'value',
+        filterTitleExcludes: 'value',
+        filterMinDuration: 'value',
+        filterMaxDuration: 'value',
+        filterMinRaw: 'value',
+        filterMaxRaw: 'value',
+        filterMinScaled: 'value',
+        filterMaxScaled: 'value',
+        hidePlayed: 'checked',
+        showExcluded: 'checked',
+        showExcludedOnly: 'checked'
+      };
+      const saved = JSON.parse(localStorage.getItem('videoFilters') || '{}');
+      Object.entries(filterMap).forEach(([id, prop]) => {
+        const el = document.getElementById(id);
+        if (el && saved[id] !== undefined) {
+          el[prop] = saved[id];
+        }
+      });
+      // Restore channel selection
+      const channelSelect = document.getElementById('filterChannel');
+      if (channelSelect && Array.isArray(saved.filterChannel)) {
+        Array.from(channelSelect.options).forEach(opt => {
+          opt.selected = saved.filterChannel.includes(opt.value);
+        });
+      }
+    }
+
+    // Save filter values to localStorage on change
+    function saveFilterValues() {
+      const filterMap = {
+        filterTitleIncludes: 'value',
+        filterTitleExcludes: 'value',
+        filterMinDuration: 'value',
+        filterMaxDuration: 'value',
+        filterMinRaw: 'value',
+        filterMaxRaw: 'value',
+        filterMinScaled: 'value',
+        filterMaxScaled: 'value',
+        hidePlayed: 'checked',
+        showExcluded: 'checked',
+        showExcludedOnly: 'checked'
+      };
+      const filters = {};
+      Object.entries(filterMap).forEach(([id, prop]) => {
+        const el = document.getElementById(id);
+        if (el) filters[id] = el[prop];
+      });
+      // Save selected channels
+      const channelSelect = document.getElementById('filterChannel');
+      if (channelSelect) {
+        filters.filterChannel = Array.from(channelSelect.selectedOptions).map(opt => opt.value);
+      }
+      localStorage.setItem('videoFilters', JSON.stringify(filters));
+    }
+
+    // Attach saveFilterValues to all filter inputs
+    filterInputs.forEach(input => input.addEventListener('input', saveFilterValues));
+    document.getElementById('filterChannel').addEventListener('change', saveFilterValues);
    
     document.getElementById('hidePlayed').addEventListener('change', () => renderGrid(allVideoData));
 
@@ -377,6 +443,7 @@
       reader.onload = function(event) {
         allVideoData = parseCSV(event.target.result);
         populateChannelFilter(allVideoData);
+        restoreFilterValues();
         allVideoData.sort((a, b) => parseFloat(a.raw_difficulty_score) - parseFloat(b.raw_difficulty_score));
         renderGrid(allVideoData);
       };
