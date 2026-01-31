@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Reunion Lodging Guide - Kentucky & Tennessee 2026</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); color: white; padding: 40px 20px; text-align: center; margin-bottom: 30px; border-radius: 10px; }
+        header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        header .subtitle { font-size: 1.2em; opacity: 0.9; }
+        .trip-info { background: white; padding: 25px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .trip-info h2 { color: #2c5530; margin-bottom: 15px; border-bottom: 2px solid #4a7c59; padding-bottom: 10px; }
+        .trip-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .detail-item { background: #f9f9f9; padding: 15px; border-radius: 8px; border-left: 4px solid #4a7c59; }
+        .detail-item strong { color: #2c5530; display: block; margin-bottom: 5px; }
+        .budget-section { margin-bottom: 40px; }
+        .budget-header { padding: 20px; border-radius: 10px 10px 0 0; color: white; }
+        .budget-cheap { background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); }
+        .budget-medium { background: linear-gradient(135deg, #f39c12 0%, #f1c40f 100%); }
+        .budget-premium { background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%); }
+        .budget-header h2 { margin: 0; font-size: 1.8em; }
+        .budget-header .range { opacity: 0.9; font-size: 1.1em; }
+        .lodging-grid { display: grid; gap: 20px; padding: 20px; background: white; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .lodging-card { display: grid; grid-template-columns: 300px 1fr; gap: 20px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background: #fafafa; }
+        .lodging-image { width: 100%; height: 200px; border-radius: 8px; overflow: hidden; background: #ddd; }
+        .lodging-image img { width: 100%; height: 100%; object-fit: cover; }
+        .lodging-image.fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 15px; text-decoration: none; }
+        .lodging-image.fallback:hover { opacity: 0.9; }
+        .lodging-image.fallback span { font-size: 0.9em; margin-top: 10px; }
+        .lodging-details h3 { color: #2c5530; margin-bottom: 10px; font-size: 1.4em; }
+        .lodging-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
+        .meta-badge { background: #e8f5e9; color: #2c5530; padding: 5px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 500; }
+        .meta-badge.price { background: #fff3e0; color: #e65100; }
+        .meta-badge.capacity { background: #e3f2fd; color: #1565c0; }
+        .lodging-info { margin-bottom: 15px; }
+        .lodging-info p { margin-bottom: 8px; font-size: 0.95em; }
+        .lodging-info .label { font-weight: 600; color: #555; }
+        .features { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; }
+        .feature { font-size: 0.9em; }
+        .feature.positive { color: #27ae60; }
+        .feature.negative { color: #e74c3c; }
+        .feature.neutral { color: #3498db; }
+        .contact-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+        .contact-links a { display: inline-flex; align-items: center; gap: 5px; padding: 8px 15px; background: #4a7c59; color: white; text-decoration: none; border-radius: 5px; font-size: 0.9em; }
+        .contact-links a.phone { background: #3498db; }
+        .availability-badge { display: inline-block; padding: 5px 12px; border-radius: 5px; font-size: 0.85em; font-weight: 600; margin-bottom: 10px; }
+        .availability-verified { background: #d4edda; color: #155724; }
+        .availability-unverified { background: #fff3cd; color: #856404; }
+        .map-section { background: white; padding: 25px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .map-section h2 { color: #2c5530; margin-bottom: 20px; }
+        #map { width: 100%; height: 500px; border-radius: 10px; border: 2px solid #e0e0e0; }
+        .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; padding: 20px; background: #f9f9f9; border-radius: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 10px; }
+        .legend-color { width: 20px; height: 20px; border-radius: 50%; }
+        .legend-color.cheap { background: #27ae60; }
+        .legend-color.medium { background: #f39c12; }
+        .legend-color.premium { background: #8e44ad; }
+        .notes-section { background: #fff9e6; border: 2px solid #f1c40f; padding: 25px; border-radius: 10px; margin-bottom: 30px; }
+        .notes-section h2 { color: #8b6914; margin-bottom: 15px; }
+        .notes-section ul { list-style: none; }
+        .notes-section li { padding: 10px 0; border-bottom: 1px solid #f1c40f30; }
+        .notes-section li:last-child { border-bottom: none; }
+        footer { text-align: center; padding: 30px; color: #666; font-size: 0.9em; }
+        @media (max-width: 768px) { .lodging-card { grid-template-columns: 1fr; } header h1 { font-size: 1.8em; } }
+        @media print { .lodging-card { break-inside: avoid; } body { background: white; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏕️ Family Reunion Lodging Guide</h1>
+            <div class="subtitle">Kentucky & Tennessee | July 30 - August 2, 2026</div>
+        </header>
+
+        <section class="trip-info">
+            <h2>📋 Trip Details</h2>
+            <div class="trip-details">
+                <div class="detail-item"><strong>📅 Dates</strong>July 30 - August 2, 2026 (3 nights)</div>
+                <div class="detail-item"><strong>👨‍👩‍👧‍👦 Families</strong>11 families total</div>
+                <div class="detail-item"><strong>👥 Total People</strong>42 people (23 adults, 19 kids)</div>
+                <div class="detail-item"><strong>🛏️ Rooms Needed</strong>Minimum 11 rooms/units</div>
+                <div class="detail-item"><strong>📍 Traveling From</strong>FL, IN, KY, NC, MI, CA, CO</div>
+                <div class="detail-item"><strong>💰 Budget Range</strong>$400 - $1,200 per family (3 nights)</div>
+            </div>
+        </section>
+
+        <section class="notes-section">
+            <h2>⚠️ Important Notes Before Booking</h2>
+            <ul>
+                <li><strong>🗓️ Booking Window:</strong> Most state parks allow reservations 1 year in advance. Your dates (July 30-Aug 2, 2026) will become bookable around July-August 2025.</li>
+                <li><strong>📅 Summer Restrictions:</strong> Some TN state park group camps require WEEKLY rentals during summer (June-August).</li>
+                <li><strong>📞 Group Bookings:</strong> For 10+ rooms/cabins, call the property directly for group rates.</li>
+                <li><strong>🔥 Peak Season:</strong> Late July/early August is peak season - book early!</li>
+            </ul>
+        </section>
+
+        <section class="map-section">
+            <h2>🗺️ Location Map - All Properties</h2>
+            <div id="map"></div>
+            <div class="legend">
+                <div class="legend-item"><span class="legend-color cheap"></span> Budget-Friendly ($400-700/family)</div>
+                <div class="legend-item"><span class="legend-color medium"></span> Mid-Range ($700-900/family)</div>
+                <div class="legend-item"><span class="legend-color premium"></span> Premium ($900-1,200/family)</div>
+            </div>
+        </section>
+
+        <!-- BUDGET-FRIENDLY SECTION -->
+        <section class="budget-section">
+            <div class="budget-header budget-cheap">
+                <h2>💚 Budget-Friendly Options</h2>
+                <div class="range">$400 - $700 per family for 3 nights</div>
+            </div>
+            <div class="lodging-grid">
+
+                <!-- 1. Lake Cumberland -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://assets.simpleviewinc.com/simpleview/image/upload/c_fit,w_600,h_400/crm/kentucky/fc73a83dfa1ea329812ba5085eae1dbd_sliderlakecumbbikers_e3c6e5c6-cc48-2c15-f49bdc46120d9340.jpg" alt="Lake Cumberland State Resort Park" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Book July 2025 for July 2026</span>
+                        <h3>1. Lake Cumberland State Resort Park</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$80-180/night</span>
+                            <span class="meta-badge capacity">63 lodge rooms + cottages</span>
+                            <span class="meta-badge">Jamestown, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 5465 State Park Rd, Jamestown, KY 42629</p>
+                            <p><span class="label">💰 Estimated Total:</span> $440-660/family (3 nights)</p>
+                            <p><span class="label">🏨 Options:</span> Lure Lodge (63 rooms), Pumpkin Creek Lodge (13 rooms - perfect for groups)</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Indoor pool complex</span>
+                            <span class="feature positive">✅ Lake access (10,300 acres)</span>
+                            <span class="feature positive">✅ On-site restaurant</span>
+                            <span class="feature positive">✅ Marina with boat rentals</span>
+                            <span class="feature positive">✅ Group reunion packages</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://parks.ky.gov/explore/lake-cumberland-state-resort-park-7795" target="_blank">🌐 Website</a>
+                            <a href="tel:1-800-325-1709" class="phone">📞 1-800-325-1709</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Kentucky Dam Village -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://assets.simpleviewinc.com/simpleview/image/upload/c_fit,w_600,h_400/crm/kentucky/e2642cd592601c481a6866079e5de89c_sliderKYDVcottage1_e3ef36b9-9951-002f-511ad2790efc2690.jpg" alt="Kentucky Dam Village cottage" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Book July 2025 for July 2026</span>
+                        <h3>2. Kentucky Dam Village State Resort Park</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$80-180/night</span>
+                            <span class="meta-badge capacity">72 lodge rooms + 68 cottages</span>
+                            <span class="meta-badge">Gilbertsville, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 113 Administration Drive, Gilbertsville, KY 42044</p>
+                            <p><span class="label">💰 Estimated Total:</span> $440-660/family (3 nights)</p>
+                            <p><span class="label">🏨 Special:</span> Village Green Inn - 14 rooms that can be rented entirely for groups!</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Kentucky Lake access</span>
+                            <span class="feature positive">✅ 18-hole golf course</span>
+                            <span class="feature positive">✅ Marina services</span>
+                            <span class="feature positive">✅ On-site restaurant</span>
+                            <span class="feature positive">✅ Village Green Inn for groups</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://parks.ky.gov/explore/kentucky-dam-village-state-resort-park-7793" target="_blank">🌐 Website</a>
+                            <a href="tel:1-800-325-0146" class="phone">📞 1-800-325-0146</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Barren River Lake -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://assets.simpleviewinc.com/simpleview/image/upload/c_fit,w_600,h_400/crm/kentucky/ALL-USE-Barren-River-Lake-State-Resort-Park-lodgeaerial-815_2585F59F-BCE7-641B-8063D7BA0EDFEA9B-2585e9d39c63b4f_2586a157-9d56-82da-dbeee05c8b7ba5d2.jpg" alt="Barren River Lake aerial view" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Book July 2025 for July 2026</span>
+                        <h3>3. Barren River Lake State Resort Park</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$80-150/night</span>
+                            <span class="meta-badge capacity">51 lodge rooms + 22 cottages</span>
+                            <span class="meta-badge">Lucas, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 1149 State Park Road, Lucas, KY 42156</p>
+                            <p><span class="label">💰 Estimated Total:</span> $400-540/family (3 nights)</p>
+                            <p><span class="label">🏨 Meeting Spaces:</span> Multiple private dining rooms + large banquet room (up to 400!)</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ 10,000-acre lake</span>
+                            <span class="feature positive">✅ Beach area</span>
+                            <span class="feature positive">✅ Heated pool</span>
+                            <span class="feature positive">✅ 18-hole golf course</span>
+                            <span class="feature positive">✅ EXCELLENT meeting facilities</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://parks.ky.gov/explore/barren-river-lake-state-resort-park-7781" target="_blank">🌐 Website</a>
+                            <a href="tel:270-646-2151" class="phone">📞 (270) 646-2151</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Pickwick Landing -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://tnstateparks.com/assets/images/content-images/social-media-images/pickwick-landing.jpg" alt="Pickwick Landing State Park" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-verified">✅ 2-night minimum - Works for your dates!</span>
+                        <h3>4. Pickwick Landing State Park</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$160-313/night cabins</span>
+                            <span class="meta-badge capacity">119 lodge rooms + 17 cabins</span>
+                            <span class="meta-badge">Counce, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 116 State Park Lane, Counce, TN 38326</p>
+                            <p><span class="label">💰 Estimated Total:</span> $480-939/family (3 nights for cabins)</p>
+                            <p><span class="label">🏨 Options:</span> 7 Premium Cabins (2-3 BR) + 10 Standard Cabins (2 BR, sleeps 6)</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Indoor AND outdoor pools</span>
+                            <span class="feature positive">✅ Swim beach</span>
+                            <span class="feature positive">✅ Full kitchens in cabins</span>
+                            <span class="feature positive">✅ 6 pavilions for groups</span>
+                            <span class="feature positive">✅ Restaurant with views</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://tnstateparks.com/parks/pickwick-landing" target="_blank">🌐 Website</a>
+                            <a href="tel:731-689-3135" class="phone">📞 (731) 689-3135</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. Paris Landing -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://tnstateparks.com/assets/images/content-images/social-media-images/paris-landing.jpg" alt="Paris Landing State Park" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Book when available</span>
+                        <h3>5. Paris Landing State Park</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$120-200/night estimated</span>
+                            <span class="meta-badge capacity">91 lodge rooms + 10 cabins</span>
+                            <span class="meta-badge">Buchanan, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 400 Lodge Road, Buchanan, TN 38222</p>
+                            <p><span class="label">💰 Estimated Total:</span> $450-700/family (3 nights)</p>
+                            <p><span class="label">⭐ NEW:</span> Newest TN state park lodge (opened 2022!)</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Brand new lodge (2022)</span>
+                            <span class="feature positive">✅ Kentucky Lake views</span>
+                            <span class="feature positive">✅ 3-BR cabins sleep 10</span>
+                            <span class="feature positive">✅ Free continental breakfast</span>
+                            <span class="feature positive">✅ Golf course</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://tnstateparks.com/parks/paris-landing" target="_blank">🌐 Website</a>
+                            <a href="tel:731-642-4311" class="phone">📞 (731) 642-4311</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. Wesley Woods Camp -->
+                <div class="lodging-card">
+                    <div class="lodging-image fallback" style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);">
+                        <a href="https://wesleywoods.winfumc.org/" target="_blank" style="color: white; text-decoration: none; text-align: center;">
+                            <strong style="font-size: 1.2em;">Wesley Woods Camp</strong><br>
+                            <span style="font-size: 0.9em; margin-top: 10px; display: block;">💰 BEST VALUE!<br>Click to view photos →</span>
+                        </a>
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-verified">✅ Available mid-May through October</span>
+                        <h3>6. Wesley Woods Camp (BEST VALUE)</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$11/person/day!</span>
+                            <span class="meta-badge capacity">Sleeps 60 people</span>
+                            <span class="meta-badge">Clark County, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Location:</span> Clark County, Kentucky</p>
+                            <p><span class="label">💰 Incredible Value:</span> $11/person/day × 42 people × 3 nights = ~$1,386 TOTAL!</p>
+                            <p><span class="label">🏨 Per Family:</span> Only ~$126/family for 3 nights!</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Swimming pool</span>
+                            <span class="feature positive">✅ Fully equipped kitchen</span>
+                            <span class="feature positive">✅ Tennis & basketball courts</span>
+                            <span class="feature positive">✅ Lake for boating/fishing</span>
+                            <span class="feature negative">⚠️ Bring own food & linens</span>
+                            <span class="feature negative">⚠️ Rustic accommodations</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://wesleywoods.winfumc.org/" target="_blank">🌐 Website</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7. Birdsong Resort -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://resort.birdsong.com/wp-content/uploads/2020/02/sunset-2019.png" alt="Birdsong Resort sunset on Kentucky Lake" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-verified">✅ Group cabins designed for 45 people!</span>
+                        <h3>7. Birdsong Resort Marina ⭐ TOP PICK</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">Call for group rates</span>
+                            <span class="meta-badge capacity">29 units + 3 GROUP cabins for 45!</span>
+                            <span class="meta-badge">Camden, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 255 Marina Road, Camden, TN</p>
+                            <p><span class="label">⭐ PERFECT FIT:</span> Has 3 group cabins specifically designed for 45+ people!</p>
+                            <p><span class="label">🏨 Since:</span> Family-owned, operating since 1961</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ GROUP cabins for 45 people!</span>
+                            <span class="feature positive">✅ Full kitchens</span>
+                            <span class="feature positive">✅ BBQ grills & picnic tables</span>
+                            <span class="feature positive">✅ Full-service marina (140 slips)</span>
+                            <span class="feature positive">✅ 14-day cancellation = full refund</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://resort.birdsong.com/" target="_blank">🌐 Website</a>
+                            <a href="tel:731-584-7880" class="phone">📞 (731) 584-7880</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8. Kenlake -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://assets.simpleviewinc.com/simpleview/image/upload/c_fit,w_600,h_400/crm/kentucky/214eb84e69920f70abfd2b7e69042be2_sliderkenlakecottage_e4099dc1-b834-76a6-97c0301fa72202a9.jpg" alt="Kenlake State Resort Park cottage" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Book July 2025 for July 2026</span>
+                        <h3>8. Kenlake State Resort Park</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$80-180/night</span>
+                            <span class="meta-badge capacity">48 hotel rooms + 34 cottages</span>
+                            <span class="meta-badge">Aurora, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 524 Kenlake Drive, Aurora, KY 42048</p>
+                            <p><span class="label">💰 Estimated Total:</span> $450-660/family (3 nights)</p>
+                            <p><span class="label">🏨 Options:</span> 1, 2, and 3-bedroom fully furnished cottages</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Kentucky Lake access</span>
+                            <span class="feature positive">✅ Swimming pool</span>
+                            <span class="feature positive">✅ Marina with boat rentals</span>
+                            <span class="feature positive">✅ Indoor/outdoor tennis</span>
+                            <span class="feature positive">✅ Free WiFi</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://parks.ky.gov/explore/kenlake-state-resort-park-7792" target="_blank">🌐 Website</a>
+                            <a href="tel:1-800-325-0143" class="phone">📞 1-800-325-0143</a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- MID-RANGE SECTION -->
+        <section class="budget-section">
+            <div class="budget-header budget-medium">
+                <h2>🧡 Mid-Range Options</h2>
+                <div class="range">$700 - $900 per family for 3 nights</div>
+            </div>
+            <div class="lodging-grid">
+
+                <!-- 9. Stony Brook Cabins -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://stonybrooklodging.icnd-cdn.com/images/homeslideshow/51B454CAwelcomeimage.jpg" alt="Stony Brook Cabins" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-verified">✅ Specializes in GROUP clusters</span>
+                        <h3>9. Stony Brook Cabins ⭐ TOP PICK</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$200-350/night per cabin</span>
+                            <span class="meta-badge capacity">14 cabins on 135 acres!</span>
+                            <span class="meta-badge">Gatlinburg, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 1663 East Pkwy, Gatlinburg, TN 37738</p>
+                            <p><span class="label">💰 Estimated Total:</span> $700-900/family</p>
+                            <p><span class="label">⭐ PERFECT:</span> 14 log cabins ALL WITHIN WALKING DISTANCE around a mountain lake!</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ ALL cabins walking distance!</span>
+                            <span class="feature positive">✅ Mountain lake on property</span>
+                            <span class="feature positive">✅ Gas fire pit & gazebo</span>
+                            <span class="feature positive">✅ Hot tubs in cabins</span>
+                            <span class="feature positive">✅ Near Smoky Mountains</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://www.stonybrooklodging.com/guest-services/groups" target="_blank">🌐 Website</a>
+                            <a href="tel:800-633-5652" class="phone">📞 800-633-5652</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 10. Alpine Mountain Village -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://alpinemountainvillage.com/wp-content/uploads/2018/02/alpine-pool.jpg" alt="Alpine Mountain Village pool and cabins" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Book in advance for summer</span>
+                        <h3>10. Alpine Mountain Village Resort</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$200-400/night</span>
+                            <span class="meta-badge capacity">Multiple 6-BR cabins</span>
+                            <span class="meta-badge">Sevierville/Pigeon Forge, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 409 Collier Drive, Sevierville, TN 37862</p>
+                            <p><span class="label">💰 Estimated Total:</span> $750-900/family (3 nights)</p>
+                            <p><span class="label">📍 Location:</span> Less than 400 yards from Pigeon Forge Parkway!</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Cabins close together</span>
+                            <span class="feature positive">✅ Outdoor swimming pool</span>
+                            <span class="feature positive">✅ Covered picnic pavilion</span>
+                            <span class="feature positive">✅ Playground</span>
+                            <span class="feature positive">✅ Pet-friendly options</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://alpinemountainvillage.com/" target="_blank">🌐 Website</a>
+                            <a href="tel:800-583-6168" class="phone">📞 800-583-6168</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 11. Gatlinburg Falls -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://www.cabinsofthesmokymountains.com/images/cotsm-bg-lg.jpg" alt="Gatlinburg Falls Resort cabin" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Peak season - book early</span>
+                        <h3>11. Gatlinburg Falls Resort</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$250-450/night</span>
+                            <span class="meta-badge capacity">50+ cabins (2-9 BR)</span>
+                            <span class="meta-badge">Gatlinburg, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 645 Park Vista Way, Gatlinburg, TN 37738</p>
+                            <p><span class="label">💰 Estimated Total:</span> $750-1,000/family (3 nights)</p>
+                            <p><span class="label">🏨 Layout:</span> 3 distinct resort areas</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Community pools</span>
+                            <span class="feature positive">✅ Walking trails between cabins</span>
+                            <span class="feature positive">✅ Game rooms & home theaters</span>
+                            <span class="feature positive">✅ Hot tubs</span>
+                            <span class="feature positive">✅ 2 min from downtown</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://www.cabinsofthesmokymountains.com/resorts/gatlinburg-falls-at-the-park.php" target="_blank">🌐 Website</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 12. Holiday Hills -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://images.squarespace-cdn.com/content/v1/66be04d85343590d6b0fe58e/9e8577ef-ac73-4bcf-be1f-bf7d581dc201/337104323_176076118563214_1138348611900092241_n.jpg" alt="Holiday Hills Resort" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-verified">✅ Group rates available!</span>
+                        <h3>12. Holiday Hills Resort</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">Group pricing available</span>
+                            <span class="meta-badge capacity">Up to 60 people!</span>
+                            <span class="meta-badge">Eddyville, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 5631 Kentucky Hwy 93 S, Eddyville, KY 42038</p>
+                            <p><span class="label">💰 Estimated Total:</span> $700-900/family with group rates</p>
+                            <p><span class="label">⭐ CAPACITY:</span> Accommodates up to 60 people!</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ 50,000-gallon pool!</span>
+                            <span class="feature positive">✅ Pavilion with grill</span>
+                            <span class="feature positive">✅ Playground</span>
+                            <span class="feature positive">✅ Kayaking & fishing</span>
+                            <span class="feature positive">✅ Specialty group pricing</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://www.holidayhillsresortky.com/" target="_blank">🌐 Website</a>
+                            <a href="tel:270-388-5253" class="phone">📞 (270) 388-5253</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 13. LakePointe -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://lakepointeresort.com/wp-content/uploads/2023/10/hottubcabinherohome.jpg" alt="LakePointe Resort cabin with hot tub" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Call for group availability</span>
+                        <h3>13. LakePointe Resort</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$175-300/night</span>
+                            <span class="meta-badge capacity">13 cabins + 12 motel rooms</span>
+                            <span class="meta-badge">Russell Springs, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> 1583 Hwy 1383, Russell Springs, KY 42642</p>
+                            <p><span class="label">💰 Estimated Total:</span> $700-900/family (3 nights)</p>
+                            <p><span class="label">🏨 Cabins:</span> Each cabin sleeps 6 (2 BR, full kitchen, hot tub)</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Hot tub in each cabin</span>
+                            <span class="feature positive">✅ Fireplace</span>
+                            <span class="feature positive">✅ Charcoal grill & fire pit</span>
+                            <span class="feature positive">✅ Full kitchens</span>
+                            <span class="feature positive">✅ Less than 1 mile to marina</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://lakepointeresort.com/" target="_blank">🌐 Website</a>
+                            <a href="tel:270-866-3856" class="phone">📞 (270) 866-3856</a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- PREMIUM SECTION -->
+        <section class="budget-section">
+            <div class="budget-header budget-premium">
+                <h2>💜 Premium Options</h2>
+                <div class="range">$900 - $1,200 per family for 3 nights</div>
+            </div>
+            <div class="lodging-grid">
+
+                <!-- 14. Cliffview Resort -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://cliffviewresort.com/wp-content/uploads/2020/01/Cliffview_OG_Default.jpg" alt="Cliffview Resort Red River Gorge" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-verified">✅ Documented success with 64-person reunions!</span>
+                        <h3>14. Cliffview Resort ⭐ LUXURY</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$300-450/night per cabin</span>
+                            <span class="meta-badge capacity">Up to 64 people!</span>
+                            <span class="meta-badge">Campton, KY</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Address:</span> Campton, Kentucky (Red River Gorge)</p>
+                            <p><span class="label">💰 Estimated Total:</span> $900-1,200/family (3 nights)</p>
+                            <p><span class="label">⭐ IMPRESSIVE:</span> 7,000+ sqft lodge with 16 bedrooms!</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Accommodates 62-64 people</span>
+                            <span class="feature positive">✅ Multiple kitchens</span>
+                            <span class="feature positive">✅ Scenic mountain views</span>
+                            <span class="feature positive">✅ Red River Gorge hiking</span>
+                            <span class="feature positive">✅ Proven reunion success</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://cliffviewresort.com/group-lodging/" target="_blank">🌐 Website</a>
+                            <a href="tel:606-663-0000" class="phone">📞 (606) 663-0000</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 15. Majestic Lodge -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://www.cabinsforyou.com/public/img/gatlinburg-cabin-rentals-drone-hero.webp" alt="Large Pigeon Forge cabin aerial view" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Book VERY early for summer!</span>
+                        <h3>15. Majestic Lodge - Everyone Under One Roof!</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$1,000-2,000/night total</span>
+                            <span class="meta-badge capacity">Sleeps 52 people!</span>
+                            <span class="meta-badge">Pigeon Forge, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Location:</span> Pigeon Forge, TN (4 miles to Dollywood)</p>
+                            <p><span class="label">💰 Split Cost:</span> ~$136/family/night = ~$410/family for 3 nights!</p>
+                            <p><span class="label">🏨 Layout:</span> 12 bedrooms, 12½ bathrooms</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ EVERYONE together!</span>
+                            <span class="feature positive">✅ Private INDOOR pool</span>
+                            <span class="feature positive">✅ Home theater</span>
+                            <span class="feature positive">✅ Game room</span>
+                            <span class="feature positive">✅ 4 miles to Dollywood</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://www.cabinsforyou.com/" target="_blank">🌐 Cabins for YOU</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 16. Smoky Mountain Lodge -->
+                <div class="lodging-card">
+                    <div class="lodging-image">
+                        <img src="https://img.bookonthebrightside.com/parksideresort/large/993.jpg" alt="Smoky Mountain Lodge at Parkside Resort" loading="lazy">
+                    </div>
+                    <div class="lodging-details">
+                        <span class="availability-badge availability-unverified">📅 Premium property - book early!</span>
+                        <h3>16. Smoky Mountain Lodge at Parkside</h3>
+                        <div class="lodging-meta">
+                            <span class="meta-badge price">$800-1,500/night total</span>
+                            <span class="meta-badge capacity">50+ guests (12 BR)</span>
+                            <span class="meta-badge">Pigeon Forge, TN</span>
+                        </div>
+                        <div class="lodging-info">
+                            <p><span class="label">📍 Location:</span> 2.5 miles from Pigeon Forge Parkway</p>
+                            <p><span class="label">💰 Split Cost:</span> ~$109/family/night = ~$330/family for 3 nights!</p>
+                            <p><span class="label">⭐ BONUS:</span> 900 sqft Pavilion event venue ON-SITE!</p>
+                        </div>
+                        <div class="features">
+                            <span class="feature positive">✅ Kitchen for 50 guests</span>
+                            <span class="feature positive">✅ Dining for 26 at table</span>
+                            <span class="feature positive">✅ 900 sqft event pavilion</span>
+                            <span class="feature positive">✅ Game rooms & hot tubs</span>
+                            <span class="feature positive">✅ Smoky Mountain views</span>
+                        </div>
+                        <div class="contact-links">
+                            <a href="https://parksideresort.com/rentals/smoky-mountain-lodge/" target="_blank">🌐 Website</a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- KEY CONTACTS -->
+        <section class="trip-info">
+            <h2>📞 Key Booking Contacts</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-top: 15px;">
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 8px;">
+                    <strong style="color: #2c5530;">Kentucky State Parks</strong><br>
+                    Reservations: <a href="tel:1-800-219-2797">1-800-219-2797</a><br>
+                    Group Sales: <a href="tel:1-800-906-2871">1-800-906-2871</a>
+                </div>
+                <div style="background: #e3f2fd; padding: 15px; border-radius: 8px;">
+                    <strong style="color: #1565c0;">Tennessee State Parks</strong><br>
+                    Reservations: <a href="tel:1-888-867-2757">1-888-867-2757</a>
+                </div>
+                <div style="background: #fff3e0; padding: 15px; border-radius: 8px;">
+                    <strong style="color: #e65100;">Birdsong Resort (Top Pick)</strong><br>
+                    <a href="tel:731-584-7880">(731) 584-7880</a>
+                </div>
+                <div style="background: #f3e5f5; padding: 15px; border-radius: 8px;">
+                    <strong style="color: #7b1fa2;">Stony Brook (Top Pick)</strong><br>
+                    <a href="tel:800-633-5652">800-633-5652</a>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>🏕️ Family Reunion Lodging Guide | Generated January 31, 2026</p>
+            <p>Prices are estimates. Verify current rates directly with properties.</p>
+            <p style="margin-top: 10px; color: #999;">Print (Ctrl+P / Cmd+P) to save as PDF</p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([36.5, -86.5], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        var greenIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        var orangeIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        var violetIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
+        var locations = [
+            {lat: 36.9917, lng: -85.0833, name: "1. Lake Cumberland SP", budget: "$440-660", icon: greenIcon},
+            {lat: 36.9833, lng: -88.3333, name: "2. Kentucky Dam Village", budget: "$440-660", icon: greenIcon},
+            {lat: 36.8667, lng: -86.1167, name: "3. Barren River Lake SP", budget: "$400-540", icon: greenIcon},
+            {lat: 35.0653, lng: -88.2442, name: "4. Pickwick Landing SP", budget: "$480-939", icon: greenIcon},
+            {lat: 36.3833, lng: -88.1167, name: "5. Paris Landing SP", budget: "$450-700", icon: greenIcon},
+            {lat: 37.9833, lng: -84.2167, name: "6. Wesley Woods Camp", budget: "~$126!", icon: greenIcon},
+            {lat: 36.0667, lng: -88.1000, name: "7. Birdsong Resort ⭐", budget: "Group cabins!", icon: greenIcon},
+            {lat: 36.8167, lng: -88.2833, name: "8. Kenlake SP", budget: "$450-660", icon: greenIcon},
+            {lat: 35.7217, lng: -83.5100, name: "9. Stony Brook ⭐", budget: "$700-900", icon: orangeIcon},
+            {lat: 35.8500, lng: -83.5333, name: "10. Alpine Mountain", budget: "$750-900", icon: orangeIcon},
+            {lat: 35.7333, lng: -83.5000, name: "11. Gatlinburg Falls", budget: "$750-1,000", icon: orangeIcon},
+            {lat: 37.0833, lng: -88.0833, name: "12. Holiday Hills", budget: "$700-900", icon: orangeIcon},
+            {lat: 37.0167, lng: -85.0333, name: "13. LakePointe", budget: "$700-900", icon: orangeIcon},
+            {lat: 37.8000, lng: -83.6667, name: "14. Cliffview Resort", budget: "$900-1,200", icon: violetIcon},
+            {lat: 35.7883, lng: -83.5542, name: "15. Majestic Lodge", budget: "~$410 split", icon: violetIcon},
+            {lat: 35.8000, lng: -83.5500, name: "16. Smoky Mtn Lodge", budget: "~$330 split", icon: violetIcon}
+        ];
+
+        locations.forEach(function(loc) {
+            L.marker([loc.lat, loc.lng], {icon: loc.icon})
+                .addTo(map)
+                .bindPopup('<strong>' + loc.name + '</strong><br>' + loc.budget);
+        });
+
+        var group = new L.featureGroup(locations.map(function(loc) {
+            return L.marker([loc.lat, loc.lng]);
+        }));
+        map.fitBounds(group.getBounds().pad(0.1));
+    </script>
+</body>
+</html>

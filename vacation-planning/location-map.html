@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Reunion Lodging - Interactive Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header { background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; margin-bottom: 20px; }
+        h1 { font-size: 1.8em; margin-bottom: 10px; }
+        #map { width: 100%; height: 600px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .legend { display: flex; justify-content: center; gap: 30px; padding: 15px; background: white; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .legend-color { width: 24px; height: 24px; border-radius: 50%; }
+        .legend-color.green { background: #27ae60; }
+        .legend-color.orange { background: #f39c12; }
+        .legend-color.purple { background: #8e44ad; }
+        .locations-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 15px; }
+        .location-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-left: 4px solid #4a7c59; }
+        .location-card h3 { color: #2c5530; margin-bottom: 8px; font-size: 1em; }
+        .location-card p { color: #666; font-size: 0.9em; margin-bottom: 5px; }
+        .location-card a { color: #4a7c59; text-decoration: none; font-weight: 500; }
+        .location-card a:hover { text-decoration: underline; }
+        .budget-tag { display: inline-block; padding: 3px 10px; border-radius: 15px; font-size: 0.75em; font-weight: 600; margin-bottom: 8px; }
+        .budget-green { background: #d4edda; color: #155724; border-left-color: #27ae60 !important; }
+        .budget-orange { background: #fff3cd; color: #856404; border-left-color: #f39c12 !important; }
+        .budget-purple { background: #e2d5f1; color: #5a3d7a; border-left-color: #8e44ad !important; }
+        footer { text-align: center; padding: 20px; color: #666; font-size: 0.9em; }
+        .leaflet-popup-content { font-family: 'Segoe UI', sans-serif; }
+        .popup-content h4 { color: #2c5530; margin-bottom: 5px; }
+        .popup-content p { margin: 3px 0; font-size: 0.9em; }
+        .popup-content a { color: #4a7c59; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗺️ Family Reunion Lodging - Interactive Map</h1>
+            <p>Kentucky & Tennessee | July 30 - August 2, 2026 | Click markers for details!</p>
+        </header>
+
+        <div class="legend">
+            <div class="legend-item"><span class="legend-color green"></span> <strong>Budget:</strong> $400-700/family</div>
+            <div class="legend-item"><span class="legend-color orange"></span> <strong>Mid-Range:</strong> $700-900/family</div>
+            <div class="legend-item"><span class="legend-color purple"></span> <strong>Premium:</strong> $900-1,200/family</div>
+        </div>
+
+        <div id="map"></div>
+
+        <h2 style="color: #2c5530; margin: 30px 0 20px 0;">📍 All Locations - Quick Reference</h2>
+
+        <div class="locations-grid">
+            <!-- BUDGET OPTIONS -->
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 Budget</span>
+                <h3>1. Lake Cumberland State Resort Park</h3>
+                <p>📍 5465 State Park Rd, Jamestown, KY 42629</p>
+                <p>💰 $440-660/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=36.9917,-85.0833" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 Budget</span>
+                <h3>2. Kentucky Dam Village State Resort Park</h3>
+                <p>📍 113 Administration Dr, Gilbertsville, KY 42044</p>
+                <p>💰 $440-660/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=36.9833,-88.3333" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 Budget</span>
+                <h3>3. Barren River Lake State Resort Park</h3>
+                <p>📍 1149 State Park Road, Lucas, KY 42156</p>
+                <p>💰 $400-540/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=36.8667,-86.1167" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 Budget</span>
+                <h3>4. Pickwick Landing State Park</h3>
+                <p>📍 116 State Park Lane, Counce, TN 38326</p>
+                <p>💰 $480-939/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=35.0653,-88.2442" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 Budget</span>
+                <h3>5. Paris Landing State Park</h3>
+                <p>📍 400 Lodge Road, Buchanan, TN 38222</p>
+                <p>💰 $450-700/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=36.3833,-88.1167" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 BEST VALUE!</span>
+                <h3>6. Wesley Woods Camp</h3>
+                <p>📍 Clark County, Kentucky</p>
+                <p>💰 ~$126/family (3 nights!) - Bring own food</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=37.9833,-84.2167" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 Budget ⭐ TOP PICK</span>
+                <h3>7. Birdsong Resort Marina</h3>
+                <p>📍 255 Marina Road, Camden, TN</p>
+                <p>💰 Group cabins designed for 45 people!</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=36.0667,-88.1000" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-green">
+                <span class="budget-tag budget-green">💚 Budget</span>
+                <h3>8. Kenlake State Resort Park</h3>
+                <p>📍 524 Kenlake Drive, Aurora, KY 42048</p>
+                <p>💰 $450-660/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=36.8167,-88.2833" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <!-- MID-RANGE OPTIONS -->
+            <div class="location-card budget-orange">
+                <span class="budget-tag budget-orange">🧡 Mid-Range ⭐ TOP PICK</span>
+                <h3>9. Stony Brook Cabins</h3>
+                <p>📍 1663 East Pkwy, Gatlinburg, TN 37738</p>
+                <p>💰 $700-900/family - 14 cabins walking distance!</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=35.7217,-83.5100" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-orange">
+                <span class="budget-tag budget-orange">🧡 Mid-Range</span>
+                <h3>10. Alpine Mountain Village Resort</h3>
+                <p>📍 409 Collier Drive, Sevierville, TN 37862</p>
+                <p>💰 $750-900/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=35.8500,-83.5333" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-orange">
+                <span class="budget-tag budget-orange">🧡 Mid-Range</span>
+                <h3>11. Gatlinburg Falls Resort</h3>
+                <p>📍 645 Park Vista Way, Gatlinburg, TN 37738</p>
+                <p>💰 $750-1,000/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=35.7333,-83.5000" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-orange">
+                <span class="budget-tag budget-orange">🧡 Mid-Range</span>
+                <h3>12. Holiday Hills Resort</h3>
+                <p>📍 5631 Kentucky Hwy 93 S, Eddyville, KY 42038</p>
+                <p>💰 $700-900/family - Holds up to 60!</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=37.0833,-88.0833" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-orange">
+                <span class="budget-tag budget-orange">🧡 Mid-Range</span>
+                <h3>13. LakePointe Resort</h3>
+                <p>📍 1583 Hwy 1383, Russell Springs, KY 42642</p>
+                <p>💰 $700-900/family (3 nights)</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=37.0167,-85.0333" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <!-- PREMIUM OPTIONS -->
+            <div class="location-card budget-purple">
+                <span class="budget-tag budget-purple">💜 Premium</span>
+                <h3>14. Cliffview Resort</h3>
+                <p>📍 Red River Gorge, Campton, KY</p>
+                <p>💰 $900-1,200/family - Sleeps 64!</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=37.8000,-83.6667" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-purple">
+                <span class="budget-tag budget-purple">💜 Premium</span>
+                <h3>15. Majestic Lodge</h3>
+                <p>📍 Pigeon Forge, TN (4 mi to Dollywood)</p>
+                <p>💰 ~$410/family (split!) - Sleeps 52 together!</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=35.7883,-83.5542" target="_blank">Open in Google Maps →</a>
+            </div>
+
+            <div class="location-card budget-purple">
+                <span class="budget-tag budget-purple">💜 Premium</span>
+                <h3>16. Smoky Mountain Lodge</h3>
+                <p>📍 Parkside Resort, Pigeon Forge, TN</p>
+                <p>💰 ~$330/family (split!) - 900sqft pavilion!</p>
+                <a href="https://www.google.com/maps/search/?api=1&query=35.8000,-83.5500" target="_blank">Open in Google Maps →</a>
+            </div>
+        </div>
+
+        <footer>
+            <p>🏕️ Family Reunion Lodging Map | Generated January 31, 2026</p>
+            <p style="margin-top: 10px;">Print this page (Ctrl+P / Cmd+P) to save as PDF</p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map
+        var map = L.map('map').setView([36.5, -86.0], 7);
+
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Custom colored icons
+        var greenIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        var orangeIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        var violetIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
+        // All locations with popup content
+        var locations = [
+            // Budget (green)
+            {lat: 36.9917, lng: -85.0833, icon: greenIcon, popup: '<div class="popup-content"><h4>1. Lake Cumberland State Resort Park</h4><p>📍 Jamestown, KY</p><p>💰 $440-660/family</p><p>✅ Indoor pool, lake, restaurant</p><a href="https://parks.ky.gov/explore/lake-cumberland-state-resort-park-7795" target="_blank">Visit Website</a></div>'},
+            {lat: 36.9833, lng: -88.3333, icon: greenIcon, popup: '<div class="popup-content"><h4>2. Kentucky Dam Village</h4><p>📍 Gilbertsville, KY</p><p>💰 $440-660/family</p><p>✅ Kentucky Lake, golf, marina</p><a href="https://parks.ky.gov/explore/kentucky-dam-village-state-resort-park-7793" target="_blank">Visit Website</a></div>'},
+            {lat: 36.8667, lng: -86.1167, icon: greenIcon, popup: '<div class="popup-content"><h4>3. Barren River Lake State Resort Park</h4><p>📍 Lucas, KY</p><p>💰 $400-540/family</p><p>✅ Beach, pool, meeting rooms</p><a href="https://parks.ky.gov/explore/barren-river-lake-state-resort-park-7781" target="_blank">Visit Website</a></div>'},
+            {lat: 35.0653, lng: -88.2442, icon: greenIcon, popup: '<div class="popup-content"><h4>4. Pickwick Landing State Park</h4><p>📍 Counce, TN</p><p>💰 $480-939/family</p><p>✅ Indoor/outdoor pools, beach</p><a href="https://tnstateparks.com/parks/pickwick-landing" target="_blank">Visit Website</a></div>'},
+            {lat: 36.3833, lng: -88.1167, icon: greenIcon, popup: '<div class="popup-content"><h4>5. Paris Landing State Park</h4><p>📍 Buchanan, TN</p><p>💰 $450-700/family</p><p>✅ NEW lodge (2022), breakfast incl</p><a href="https://tnstateparks.com/parks/paris-landing" target="_blank">Visit Website</a></div>'},
+            {lat: 37.9833, lng: -84.2167, icon: greenIcon, popup: '<div class="popup-content"><h4>6. Wesley Woods Camp 💰</h4><p>📍 Clark County, KY</p><p>💰 ~$126/family - BEST VALUE!</p><p>⚠️ Bring own food & linens</p><a href="https://wesleywoods.winfumc.org/" target="_blank">Visit Website</a></div>'},
+            {lat: 36.0667, lng: -88.1000, icon: greenIcon, popup: '<div class="popup-content"><h4>7. Birdsong Resort ⭐ TOP PICK</h4><p>📍 Camden, TN</p><p>💰 Group rates available</p><p>✅ GROUP cabins for 45 people!</p><a href="https://resort.birdsong.com/" target="_blank">Visit Website</a></div>'},
+            {lat: 36.8167, lng: -88.2833, icon: greenIcon, popup: '<div class="popup-content"><h4>8. Kenlake State Resort Park</h4><p>📍 Aurora, KY</p><p>💰 $450-660/family</p><p>✅ Pool, marina, tennis</p><a href="https://parks.ky.gov/explore/kenlake-state-resort-park-7792" target="_blank">Visit Website</a></div>'},
+
+            // Mid-range (orange)
+            {lat: 35.7217, lng: -83.5100, icon: orangeIcon, popup: '<div class="popup-content"><h4>9. Stony Brook Cabins ⭐ TOP PICK</h4><p>📍 Gatlinburg, TN</p><p>💰 $700-900/family</p><p>✅ 14 cabins ALL walking distance!</p><a href="https://www.stonybrooklodging.com/guest-services/groups" target="_blank">Visit Website</a></div>'},
+            {lat: 35.8500, lng: -83.5333, icon: orangeIcon, popup: '<div class="popup-content"><h4>10. Alpine Mountain Village</h4><p>📍 Sevierville, TN</p><p>💰 $750-900/family</p><p>✅ Pool, pavilion, playground</p><a href="https://alpinemountainvillage.com/" target="_blank">Visit Website</a></div>'},
+            {lat: 35.7333, lng: -83.5000, icon: orangeIcon, popup: '<div class="popup-content"><h4>11. Gatlinburg Falls Resort</h4><p>📍 Gatlinburg, TN</p><p>💰 $750-1,000/family</p><p>✅ Pools, game rooms, hot tubs</p><a href="https://www.cabinsofthesmokymountains.com/resorts/gatlinburg-falls-at-the-park.php" target="_blank">Visit Website</a></div>'},
+            {lat: 37.0833, lng: -88.0833, icon: orangeIcon, popup: '<div class="popup-content"><h4>12. Holiday Hills Resort</h4><p>📍 Eddyville, KY</p><p>💰 $700-900/family</p><p>✅ 50,000-gal pool! Holds 60</p><a href="https://www.holidayhillsresortky.com/" target="_blank">Visit Website</a></div>'},
+            {lat: 37.0167, lng: -85.0333, icon: orangeIcon, popup: '<div class="popup-content"><h4>13. LakePointe Resort</h4><p>📍 Russell Springs, KY</p><p>💰 $700-900/family</p><p>✅ Hot tubs, kitchens, marina nearby</p><a href="https://lakepointeresort.com/" target="_blank">Visit Website</a></div>'},
+
+            // Premium (violet)
+            {lat: 37.8000, lng: -83.6667, icon: violetIcon, popup: '<div class="popup-content"><h4>14. Cliffview Resort</h4><p>📍 Red River Gorge, KY</p><p>💰 $900-1,200/family</p><p>✅ 7,000 sqft lodge, sleeps 64!</p><a href="https://cliffviewresort.com/group-lodging/" target="_blank">Visit Website</a></div>'},
+            {lat: 35.7883, lng: -83.5542, icon: violetIcon, popup: '<div class="popup-content"><h4>15. Majestic Lodge</h4><p>📍 Pigeon Forge, TN</p><p>💰 ~$410/family (split!)</p><p>✅ Sleeps 52 TOGETHER, indoor pool</p><a href="https://www.cabinsforyou.com/" target="_blank">Visit Website</a></div>'},
+            {lat: 35.8000, lng: -83.5500, icon: violetIcon, popup: '<div class="popup-content"><h4>16. Smoky Mountain Lodge</h4><p>📍 Pigeon Forge, TN</p><p>💰 ~$330/family (split!)</p><p>✅ 900sqft pavilion, sleeps 50+</p><a href="https://parksideresort.com/rentals/smoky-mountain-lodge/" target="_blank">Visit Website</a></div>'}
+        ];
+
+        // Add all markers
+        var markers = [];
+        locations.forEach(function(loc) {
+            var marker = L.marker([loc.lat, loc.lng], {icon: loc.icon})
+                .addTo(map)
+                .bindPopup(loc.popup);
+            markers.push(marker);
+        });
+
+        // Fit bounds to show all markers
+        var group = new L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.1));
+    </script>
+</body>
+</html>
