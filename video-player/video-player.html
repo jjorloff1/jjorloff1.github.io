@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Japanese Videos</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
     .grid { display: flex; flex-wrap: wrap; gap: 20px; }
@@ -37,7 +38,7 @@
   <h1>Japanese Videos</h1>
   <div id="playedDuration" style="font-size: 1.2em; font-weight: bold;">Total Played Time: 0:00:00 | Played Today: 0:00:00</div>
 </div>
-  <p><em>Tip: If video playback fails, please use a local server (e.g., Live Server in VS Code) instead of opening via <code>file://</code>.</em></p>
+<p><em>Tip: If video playback fails, run a local server. In terminal: <code>cd /path/to/this/folder && python3 -m http.server 8000</code> then open <code>http://localhost:8000/video-player.html</code></em></p>
   <div class="controls">
     <input type="file" id="csvFile" accept=".csv">
     <label><input type="checkbox" id="hidePlayed" aria-checked="true" checked="checked"> Hide Played</label>
@@ -128,7 +129,11 @@
       indicator.textContent = 'Played';
 
       const iframe = document.createElement('iframe');
-      iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+      // Fix Error 153: Add origin parameter and autoplay
+      const origin = window.location.protocol === 'file:' 
+        ? 'https://localhost' 
+        : encodeURIComponent(window.location.origin);
+      iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&origin=${origin}`;
       iframe.setAttribute('frameborder', '0');
       iframe.setAttribute('allowfullscreen', '');
       iframe.setAttribute('allow', 'autoplay; encrypted-media');
