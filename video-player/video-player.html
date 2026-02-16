@@ -557,8 +557,18 @@
     }
     
 
-    document.getElementById('showExcluded').addEventListener('change', () => renderGrid(allVideoData));
-    document.getElementById('showExcludedOnly').addEventListener('change', () => renderGrid(allVideoData));
+    document.getElementById('hidePlayed').addEventListener('change', () => {
+      saveFilterValues();
+      renderGrid(allVideoData);
+    });
+    document.getElementById('showExcluded').addEventListener('change', () => {
+      saveFilterValues();
+      renderGrid(allVideoData);
+    });
+    document.getElementById('showExcludedOnly').addEventListener('change', () => {
+      saveFilterValues();
+      renderGrid(allVideoData);
+    });
 
     document.getElementById('downloadExcluded').addEventListener('click', () => {
       Storage.downloadExcludedJson('excluded_videos.json');
