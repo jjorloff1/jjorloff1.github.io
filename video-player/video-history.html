@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Japanese Video History</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h1 { margin: 0; }
+    .topbar { display:flex; justify-content: space-between; align-items:center; gap: 20px; flex-wrap: wrap; }
+    .totals { font-size: 1.1em; font-weight: bold; }
+
+    .controls { margin: 16px 0 20px; display:flex; flex-wrap: wrap; gap: 10px; align-items:center; }
+    .controls button, .controls input[type="file"] { cursor:pointer; }
+
+    .charts { display:flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+    .chart-card {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      background: #fff;
+      padding: 14px;
+      width: 560px;
+      max-width: 100%;
+    }
+    .chart-title { font-weight: 700; margin: 0 0 10px; }
+    canvas { width: 100% !important; height: 320px !important; }
+
+    .history { margin-top: 22px; }
+    .day-section { margin: 18px 0 28px; }
+    .day-header { display:flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .day-header h2 { margin: 0; font-size: 1.1rem; }
+    .day-total { color: #444; font-weight: 600; }
+
+    .grid { display:flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
+    .video-card { border: 1px solid #ccc; padding: 10px; width: 260px; position: relative; background: #f9f9f9; border-radius: 10px; }
+    .video-wrapper { position: relative; display: inline-block; width: 100%; }
+    .thumbnail { display:block; width:100%; height:auto; border-radius: 8px; cursor:pointer; }
+    .video-duration {
+      position:absolute; bottom:8px; right:8px;
+      background-color: rgba(0,0,0,0.65); color:#fff;
+      padding: 2px 6px; font-size: 0.75rem; border-radius: 4px;
+      pointer-events:none;
+    }
+
+    .card-title {
+      font-size: .85rem;
+      line-height: 1.3;
+      margin: 8px 0 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .meta { font-size: 12px; color: #333; }
+    .actions { margin-top: 10px; display:flex; gap: 10px; align-items:center; }
+    .actions button { padding: 6px 10px; border-radius: 6px; border: 1px solid #bbb; background:#fff; }
+    .actions button:hover { background: #f0f0f0; }
+
+    /* Modal */
+    .modal { display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color: rgba(0,0,0,0.7); }
+    .modal-content { background:#fff; margin: 8% auto; padding: 20px; border:1px solid #888; width: 650px; max-width: 92vw; border-radius: 10px; position: relative; }
+    .close { color:#aaa; position:absolute; top: -2px; right: 8px; font-size: 28px; font-weight: bold; cursor:pointer; }
+    iframe { width: 100%; height: 360px; border: 0; }
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <h1>Video History</h1>
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:flex-end;">
+      <a href="video-player.html" style="font-weight: 600;">Back to video player</a>
+      <div id="totals" class="totals">Total Played Time: 0:00:00 | Played Today: 0:00:00</div>
+    </div>
+  </div>
+
+  <p><em>Tip: If playback fails, run a local server. In terminal:
+    <code>cd /path/to/this/folder && python3 -m http.server 8000</code>
+    then open <code>http://localhost:8000/video-history.html</code></em></p>
+
+  <div class="controls">
+    <input type="file" id="csvFile" accept=".csv" />
+    <button id="downloadPlayed">Download Played History (JSON)</button>
+    <input type="file" id="uploadPlayed" accept=".json" />
+  </div>
+
+  <div class="charts">
+    <div class="chart-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div class="chart-title" id="cumulativeTitle">Cumulative Study Time (30 Days)</div>
+        <label style="font-size: 0.95em; font-weight: 600; display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="showAllHistory" />
+          Show complete history
+        </label>
+      </div>
+      <canvas id="chartCumulative"></canvas>
+      <div id="lifetime" style="margin-top: 10px; color:#333; font-weight: 600;">
+        Total lifetime study duration - 0:00:00
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">Hours Studied per Week (12 weeks)</div>
+      <canvas id="chartWeekly"></canvas>
+    </div>
+  </div>
+
+  <div class="history">
+    <h2 style="margin-top: 26px;">Historical Activity</h2>
+    <div id="historyRoot"></div>
+  </div>
+
+  <div id="videoModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <div id="video-player"></div>
+    </div>
+  </div>
+
+  <script src="js/time.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/video-lists.js"></script>
+  <script src="js/player-modal.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <script>
+    // ===== Data =====
+    let videoById = {};        // video_id -> video row (built from saved lists)
+    let cumulativeChart = null;
+    let weeklyChart = null;
+    let showAllHistory = false;
+
+
+
+
+    function rebuildVideoMapFromSavedLists() {
+      const entries = VideoLists.loadAllCsvTexts();
+
+      const built = VideoCatalog.buildVideoByIdFromCsvTexts(entries);
+      videoById = built.videoById;
+    }
+
+    function ensureVideoMapReady() {
+      if (Object.keys(videoById).length > 0) return;
+      rebuildVideoMapFromSavedLists();
+    }
+
+
+    // ===== Modal player (adapted from your video-player.html) =====
+    function renderPlayer(videoId) {
+      const title = (videoById[videoId]?.title) ? videoById[videoId].title : videoId;
+      PlayerModal.open(videoId, title);
+    }
+
+    function closeModal() {
+      PlayerModal.close();
+    }
+
+    window.onclick = function(event) {
+      if (event.target === document.getElementById('videoModal')) {
+        closeModal();
+      }
+    };
+
+    PlayerModal.init({
+      modalId: 'videoModal',
+      playerContainerId: 'video-player'
+    });
+
+    // ===== Aggregations =====
+    function computeAggregates() {
+      ensureVideoMapReady();
+      const played = Storage.getPlayedMap();
+
+      // Total lifetime + today totals require CSV durations
+      let totalPlayedSeconds = 0;
+      let playedTodaySeconds = 0;
+      const today = new Date();
+
+      Object.keys(played).forEach(videoId => {
+        const video = videoById[videoId];
+        if (!video) return;
+        const dur = parseInt(video.duration, 10) || 0;
+        totalPlayedSeconds += dur;
+
+        const ts = played[videoId]?.timestamp;
+        if (ts) {
+          const playedDate = new Date(ts);
+          if (
+            playedDate.getFullYear() === today.getFullYear() &&
+            playedDate.getMonth() === today.getMonth() &&
+            playedDate.getDate() === today.getDate()
+          ) {
+            playedTodaySeconds += dur;
+          }
+        }
+      });
+
+      // Per-day totals (based on played timestamp)
+      const byDay = {}; // y-m-d -> { seconds, items: [videoId...] }
+      Object.keys(played).forEach(videoId => {
+        const video = videoById[videoId];
+        if (!video) return;
+        const ts = played[videoId]?.timestamp;
+        if (!ts) return;
+        const key = Time.ymd(ts);
+        if (!byDay[key]) byDay[key] = { seconds: 0, items: [] };
+        byDay[key].seconds += (parseInt(video.duration, 10) || 0);
+        byDay[key].items.push(videoId);
+      });
+
+      return { totalPlayedSeconds, playedTodaySeconds, byDay };
+    }
+
+    // ===== Charts =====
+    function buildCharts() {
+      const { totalPlayedSeconds, byDay } = computeAggregates();
+
+      // ---- Cumulative chart (30 days or full history) ----
+      const now = new Date();
+
+      // Build per-day seconds map across all played activity
+      const dayKeysAll = Object.keys(byDay).sort();
+
+      let labels = [];
+      let cumulativeHours = [];
+      let yMin = 0;
+      let yMax = Math.ceil((totalPlayedSeconds || 0) / 3600);
+
+      if (!showAllHistory) {
+        // ---- Last 30 days anchored to lifetime total ----
+        const start = Time.startOfDay(now);
+        start.setDate(start.getDate() - 29); // inclusive 30 days
+
+        const dailySeconds = [];
+        for (let i = 0; i < 30; i++) {
+          const d = new Date(start);
+          d.setDate(d.getDate() + i);
+          const key = Time.ymd(d);
+          labels.push(key.slice(5)); // MM-DD
+          dailySeconds.push(byDay[key]?.seconds || 0);
+        }
+
+        const lifetimeTotalHours = (totalPlayedSeconds || 0) / 3600;
+        const windowHours = dailySeconds.reduce((acc, s) => acc + (s / 3600), 0);
+        const startHours = Math.max(0, lifetimeTotalHours - windowHours);
+
+        let runningHours = 0;
+        dailySeconds.forEach(s => {
+          runningHours += (s / 3600);
+          cumulativeHours.push(startHours + runningHours);
+        });
+
+        yMin = Math.floor(startHours);
+        yMax = Math.ceil(lifetimeTotalHours);
+
+        const titleEl = document.getElementById('cumulativeTitle');
+        if (titleEl) titleEl.textContent = 'Cumulative Study Time (30 Days)';
+      } else {
+        // ---- Full history (grouped buckets to keep ~similar tick count) ----
+        // Determine bucket type based on span.
+        const earliestKey = dayKeysAll.length ? dayKeysAll[0] : Time.ymd(now);
+        const latestKey = dayKeysAll.length ? dayKeysAll[dayKeysAll.length - 1] : Time.ymd(now);
+        const earliest = new Date(earliestKey + 'T00:00:00');
+        const latest = new Date(latestKey + 'T00:00:00');
+        const spanDays = Math.max(1, Math.round((Time.startOfDay(latest) - Time.startOfDay(earliest)) / (1000 * 60 * 60 * 24)) + 1);
+
+        let mode = 'week';
+        if (spanDays <= 30) mode = 'day';
+        else if (spanDays <= 420) mode = 'week';      // ~14 months
+        else if (spanDays <= 930) mode = 'month';     // ~2.5 years
+        else mode = 'quarter';
+
+        const bucketSeconds = {}; // bucketKey -> seconds
+        const bucketOrder = [];   // ordered unique bucketKeys
+
+        function addBucket(key, seconds) {
+          if (!(key in bucketSeconds)) {
+            bucketSeconds[key] = 0;
+            bucketOrder.push(key);
+          }
+          bucketSeconds[key] += seconds;
+        }
+
+        dayKeysAll.forEach(dayKey => {
+          const seconds = byDay[dayKey]?.seconds || 0;
+          const d = new Date(dayKey + 'T00:00:00');
+
+          if (mode === 'day') {
+            addBucket(dayKey, seconds);
+          } else if (mode === 'week') {
+            const ws = Time.startOfISOWeek(d);
+            addBucket(Time.ymd(ws), seconds);
+          } else if (mode === 'month') {
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            addBucket(`${d.getFullYear()}-${m}`, seconds);
+          } else {
+            const q = Math.floor(d.getMonth() / 3) + 1;
+            addBucket(`${d.getFullYear()}-Q${q}`, seconds);
+          }
+        });
+
+        // Ensure chronological order
+        bucketOrder.sort((a, b) => (a < b ? -1 : 1));
+
+        // Convert to cumulative hours from 0..lifetime
+        let runningHours = 0;
+        bucketOrder.forEach(key => {
+          labels.push(mode === 'day' ? key.slice(5) : key); // day uses MM-DD; others keep key
+          runningHours += (bucketSeconds[key] / 3600);
+          cumulativeHours.push(runningHours);
+        });
+
+        yMin = 0;
+        yMax = Math.ceil((totalPlayedSeconds || 0) / 3600);
+
+        const titleEl = document.getElementById('cumulativeTitle');
+        if (titleEl) {
+          const label = mode === 'day' ? 'Daily' : (mode === 'week' ? 'Weekly' : (mode === 'month' ? 'Monthly' : 'Quarterly'));
+          titleEl.textContent = `Cumulative Study Time (All Time • ${label})`;
+        }
+      }
+
+      const ctx1 = document.getElementById('chartCumulative').getContext('2d');
+      if (cumulativeChart) cumulativeChart.destroy();
+      cumulativeChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Hours (cumulative)',
+            data: cumulativeHours,
+            tension: 0.2,
+            pointRadius: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: {
+              title: { display: true, text: 'Hours' },
+              min: yMin,
+              max: yMax
+            }
+          }
+        }
+      });
+
+      document.getElementById('lifetime').textContent =
+        `Total lifetime study duration - ${Time.secondsToHMS(totalPlayedSeconds)}`;
+
+      // ---- Weekly last 12 weeks ----
+      const weekLabels = [];
+      const weekHours = [];
+
+      const thisWeekStart = Time.startOfISOWeek(now); // Monday
+      const firstWeekStart = new Date(thisWeekStart);
+      firstWeekStart.setDate(firstWeekStart.getDate() - (11 * 7)); // 12 weeks incl this
+
+      // Precompute per-week bucket (key by weekStartYMD)
+      const weeklySeconds = {}; // weekStartYMD -> seconds
+      Object.keys(byDay).forEach(dayKey => {
+        const d = new Date(dayKey + 'T00:00:00');
+        const ws = Time.startOfISOWeek(d);
+        const wsKey = Time.ymd(ws);
+        weeklySeconds[wsKey] = (weeklySeconds[wsKey] || 0) + byDay[dayKey].seconds;
+      });
+
+      for (let i = 0; i < 12; i++) {
+        const ws = new Date(firstWeekStart);
+        ws.setDate(ws.getDate() + i * 7);
+        const wsKey = Time.ymd(ws);
+        weekLabels.push(wsKey.slice(5)); // "MM-DD"
+        weekHours.push((weeklySeconds[wsKey] || 0) / 3600);
+      }
+
+      const ctx2 = document.getElementById('chartWeekly').getContext('2d');
+      if (weeklyChart) weeklyChart.destroy();
+      weeklyChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: weekLabels,
+          datasets: [{
+            label: 'Hours',
+            data: weekHours
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { title: { display: true, text: 'Hours' } }
+          }
+        }
+      });
+    }
+
+    // ===== History list =====
+    function createVideoCard(videoId, playedEntry) {
+      const video = videoById[videoId];
+      const isMissing = !video;
+
+      const card = document.createElement('div');
+      card.className = 'video-card';
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'video-wrapper';
+
+      const img = document.createElement('img');
+      img.className = 'thumbnail';
+      img.src = `https://img.youtube.com/vi/${videoId}/0.jpg`;
+      img.onclick = () => renderPlayer(videoId);
+
+      const durOverlay = document.createElement('div');
+      durOverlay.className = 'video-duration';
+      if (isMissing) {
+        durOverlay.textContent = '?:??';
+      } else {
+        durOverlay.textContent = `${Time.secondsToMSS(video.duration)} - ${video.scaled_difficulty_score ?? ''}`.trim();
+      }
+
+      wrapper.appendChild(img);
+      wrapper.appendChild(durOverlay);
+
+      const title = document.createElement('div');
+      title.className = 'card-title';
+      title.textContent = isMissing ? videoId : (video.title || videoId);
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const when = playedEntry?.timestamp ? new Date(playedEntry.timestamp) : null;
+      meta.innerHTML = `
+        <div><em>${isMissing ? '(not found in saved lists)' : (video.channel_id ?? '')}</em></div>
+        <div>${videoId}</div>
+        <div>Raw Score: ${isMissing ? '' : (video.raw_difficulty_score ?? '')}</div>
+        <div>Played: ${when ? when.toLocaleString() : ''}</div>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const unmarkBtn = document.createElement('button');
+      unmarkBtn.textContent = 'Unmark Played';
+      unmarkBtn.onclick = () => {
+        Storage.unmarkPlayed(videoId);
+        refreshAll();
+      };
+
+      actions.appendChild(unmarkBtn);
+
+      card.appendChild(wrapper);
+      card.appendChild(title);
+      card.appendChild(meta);
+      card.appendChild(actions);
+
+      return card;
+    }
+
+    function renderHistory() {
+      const root = document.getElementById('historyRoot');
+      root.innerHTML = '';
+
+      const played = Storage.getPlayedMap();
+      const { byDay } = computeAggregates();
+
+      // Sort days descending
+      const dayKeys = Object.keys(byDay).sort((a, b) => (a < b ? 1 : -1));
+
+      if (dayKeys.length === 0) {
+        root.innerHTML = '<p style="color:#444;">No played videos found yet. Mark videos as played on the player page to see them here.</p>';
+        return;
+      }
+
+      dayKeys.forEach(dayKey => {
+        const section = document.createElement('div');
+        section.className = 'day-section';
+
+        const header = document.createElement('div');
+        header.className = 'day-header';
+
+        const h2 = document.createElement('h2');
+        h2.textContent = `${dayKey}`;
+
+        const total = document.createElement('div');
+        total.className = 'day-total';
+        total.textContent = `${Time.secondsToHM(byDay[dayKey].seconds)} (hh:mm)`;
+
+        header.appendChild(h2);
+        header.appendChild(total);
+
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+
+        // Optional: sort videos within day by timestamp desc (mostly unnecessary since each video has 1 timestamp)
+        const items = (byDay[dayKey].items || []).slice().sort((a, b) => {
+          const ta = played[a]?.timestamp || '';
+          const tb = played[b]?.timestamp || '';
+          return ta < tb ? 1 : -1;
+        });
+
+        items.forEach(videoId => {
+          const card = createVideoCard(videoId, played[videoId]);
+          if (card) grid.appendChild(card);
+        });
+
+        section.appendChild(header);
+        section.appendChild(grid);
+        root.appendChild(section);
+      });
+    }
+
+    function updateTotalsDisplay() {
+      const { totalPlayedSeconds, playedTodaySeconds } = computeAggregates();
+      if (Object.keys(Storage.getPlayedMap()).length > 0 && Object.keys(videoById).length === 0) {
+        document.getElementById('totals').textContent = 'Saved lists not found. Upload a CSV on the player page (or here) to enable durations.';
+        return;
+      }
+      document.getElementById('totals').textContent =
+        `Total Played Time: ${Time.secondsToHMS(totalPlayedSeconds)} | Played Today: ${Time.secondsToHMS(playedTodaySeconds)}`;
+    }
+
+    function refreshAll() {
+      updateTotalsDisplay();
+      buildCharts();
+      renderHistory();
+    }
+
+    // ===== Wire up controls =====
+    document.getElementById('showAllHistory').addEventListener('change', (e) => {
+      showAllHistory = !!e.target.checked;
+      buildCharts();
+    });
+
+    document.getElementById('csvFile').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const csvText = event.target.result;
+        VideoLists.saveCsvText(file.name, csvText);
+        VideoLists.setLastUsed(file.name);
+        // Rebuild map from all saved lists (including this one)
+        rebuildVideoMapFromSavedLists();
+        refreshAll();
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('downloadPlayed').addEventListener('click', () => {
+      Storage.downloadPlayedJson('played_videos.json');
+    });
+
+    document.getElementById('uploadPlayed').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      Storage.uploadPlayedJsonFile(file, () => {
+        refreshAll();
+      });
+    });
+
+    // On load: build the video lookup map from any saved lists from the player page.
+    rebuildVideoMapFromSavedLists();
+    const toggle = document.getElementById('showAllHistory');
+    if (toggle) toggle.checked = showAllHistory;
+    refreshAll();
+  </script>
+</body>
+</html>

@@ -36,11 +36,19 @@
 <body>
   <div style="display: flex; justify-content: space-between; align-items: center;">
   <h1>Japanese Videos</h1>
-  <div id="playedDuration" style="font-size: 1.2em; font-weight: bold;">Total Played Time: 0:00:00 | Played Today: 0:00:00</div>
+  <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:flex-end;">
+    <a href="video-history.html" style="font-weight: 600;">History</a>
+    <div id="playedDuration" style="font-size: 1.2em; font-weight: bold;">Total Played Time: 0:00:00 | Played Today: 0:00:00</div>
+  </div>
 </div>
 <p><em>Tip: If video playback fails, run a local server. In terminal: <code>cd /path/to/this/folder && python3 -m http.server 8000</code> then open <code>http://localhost:8000/video-player.html</code></em></p>
   <div class="controls">
     <input type="file" id="csvFile" accept=".csv">
+    <label>Saved lists:
+      <select id="csvSelect" style="min-width: 260px;"></select>
+    </label>
+  </div>
+  <div class="controls">
     <label><input type="checkbox" id="hidePlayed" aria-checked="true" checked="checked"> Hide Played</label>
     <button id="downloadPlayed">Download Played Videos</button>
     <input type="file" id="uploadPlayed" accept=".json">
@@ -76,6 +84,10 @@
     </div>
   </div>
 
+  <script src="js/time.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/video-lists.js"></script>
+  <script src="js/player-modal.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script>
     let allVideoData = [];
@@ -83,31 +95,60 @@
     let currentRenderIndex = 0;
     const BATCH_SIZE = 30;
 
+    // ===== Saved CSV list helpers (shared) =====
+
     function parseCSV(text) {
-      return Papa.parse(text, {
-        header: true,
-        skipEmptyLines: true,
-        dynamicTyping: true
-      }).data;
+      return VideoCatalog.parseCsvText(text);
+    }
+
+    function populateCsvSelect() {
+      const select = document.getElementById('csvSelect');
+      if (!select) return;
+
+      const idx = VideoLists.listFilenames();
+      select.innerHTML = '';
+
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = idx.length ? 'Select a saved list…' : 'No saved lists yet';
+      select.appendChild(placeholder);
+
+      idx.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      });
+
+      const last = VideoLists.lastUsed() || '';
+      if (last && idx.includes(last)) {
+        select.value = last;
+      }
+    }
+
+    function loadAndRenderFromCsvText(csvText, filenameForLastUsed) {
+      if (!csvText) return;
+      if (filenameForLastUsed) VideoLists.setLastUsed(filenameForLastUsed);
+
+      allVideoData = parseCSV(csvText);
+      populateChannelFilter(allVideoData);
+      restoreFilterValues();
+      allVideoData.sort((a, b) => parseFloat(a.raw_difficulty_score) - parseFloat(b.raw_difficulty_score));
+      renderGrid(allVideoData);
     }
 
     function markAsPlayed(videoId) {
-      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
-      played[videoId] = { played: true, timestamp: new Date().toISOString() };
-      localStorage.setItem('playedVideos', JSON.stringify(played));
+      Storage.markPlayed(videoId);
       updatePlayedIndicators(videoId);
     }
 
     function unmarkAsPlayed(videoId) {
-      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
-      delete played[videoId];
-      localStorage.setItem('playedVideos', JSON.stringify(played));
+      Storage.unmarkPlayed(videoId);
       updatePlayedIndicators(videoId);
     }
 
     function isPlayed(videoId) {
-      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
-      return played[videoId];
+      return Storage.isPlayed(videoId);
     }
 
     function updatePlayedIndicators(videoId) {
@@ -120,24 +161,28 @@
     }
 
     function renderPlayer(videoId) {
-      const container = document.getElementById('video-player');
-      container.innerHTML = '';
+      // Open modal + iframe using shared modal helper
+      const video = allVideoData.find(v => v.video_id === videoId);
+      const titleText = video?.title || videoId;
+      PlayerModal.open(videoId, titleText);
 
+      const container = document.getElementById('video-player');
+
+      // Played indicator (kept from previous behavior)
       const indicator = document.createElement('div');
       indicator.className = 'played-indicator';
       indicator.style.display = isPlayed(videoId) ? 'block' : 'none';
       indicator.textContent = 'Played';
 
-      const iframe = document.createElement('iframe');
-      // Fix Error 153: Add origin parameter and autoplay
-      const origin = window.location.protocol === 'file:' 
-        ? 'https://localhost' 
-        : encodeURIComponent(window.location.origin);
-      iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&origin=${origin}`;
-      iframe.setAttribute('frameborder', '0');
-      iframe.setAttribute('allowfullscreen', '');
-      iframe.setAttribute('allow', 'autoplay; encrypted-media');
+      // Insert the indicator right before the iframe if possible
+      const maybeIframe = container.querySelector('iframe');
+      if (maybeIframe) {
+        container.insertBefore(indicator, maybeIframe);
+      } else {
+        container.prepend(indicator);
+      }
 
+      // Played toggle inside modal (kept from previous behavior)
       const toggleWrap = document.createElement('div');
       toggleWrap.className = 'played-toggle';
       const toggle = document.createElement('input');
@@ -163,21 +208,25 @@
       toggleWrap.appendChild(toggle);
       toggleWrap.appendChild(label);
 
-      container.appendChild(indicator);
-      container.appendChild(iframe);
       container.appendChild(toggleWrap);
-      document.getElementById('videoModal').style.display = 'block';
+
+      // Ensure indicator reflects current state
+      indicator.style.display = isPlayed(videoId) ? 'block' : 'none';
     }
 
     function closeModal() {
-      document.getElementById('videoModal').style.display = 'none';
-      document.getElementById('video-player').innerHTML = '';
+      PlayerModal.close();
     }
 
     window.onclick = function(event) {
       const modal = document.getElementById('videoModal');
       if (event.target == modal) closeModal();
     }
+
+    PlayerModal.init({
+      modalId: 'videoModal',
+      playerContainerId: 'video-player'
+    });
 
     function renderNextBatch() {
       const grid = document.getElementById('videoGrid');
@@ -204,8 +253,8 @@
   const maxScaled = parseFloat(document.getElementById('filterMaxScaled').value);
 
       filteredVideoData = data.filter(video => {
-        if (!(showExcluded || showExcludedOnly) && isExcluded(video.video_id)) return false;
-        if (showExcludedOnly && !isExcluded(video.video_id)) return false;
+        if (!(showExcluded || showExcludedOnly) && Storage.isExcluded(video.video_id)) return false;
+        if (showExcludedOnly && !Storage.isExcluded(video.video_id)) return false;
         if (hidePlayed && isPlayed(video.video_id)) return false;
         if (selectedChannels.length && !selectedChannels.includes(video.channel_id)) return false;
         const title = (video.title || '').toLowerCase();
@@ -273,10 +322,7 @@
       card.className = 'video-card';
       card.dataset.id = video.video_id;
 
-      const durationSeconds = parseInt(video.duration, 10);
-      const minutes = Math.floor(durationSeconds / 60);
-      const seconds = durationSeconds % 60;
-      const durationFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      const durationFormatted = Time.secondsToMSS(video.duration);
 
       // Create a wrapper div for the image and duration overlay
       const wrapper = document.createElement('div');
@@ -340,18 +386,18 @@
       const excludeToggle = document.createElement('input');
       excludeToggle.type = 'checkbox';
       excludeToggle.id = `exclude-${video.video_id}`;
-      excludeToggle.checked = isExcluded(video.video_id);
+      excludeToggle.checked = Storage.isExcluded(video.video_id);
       excludeToggle.onchange = () => {
         if (excludeToggle.checked) {
-          markAsExcluded(video.video_id);
+          Storage.markExcluded(video.video_id);
           if (!document.getElementById('showExcludedOnly').checked) {
             fadeOutVideoCard(card, "Video excluded. ", () => {
-              unmarkAsExcluded(video.video_id);
+              Storage.unmarkExcluded(video.video_id);
               renderGrid(allVideoData);
             });
           }
         } else {
-          unmarkAsExcluded(video.video_id);
+          Storage.unmarkExcluded(video.video_id);
         }
       };
       const excludeLabel = document.createElement('label');
@@ -372,7 +418,6 @@
     }
 
     const filterInputs = document.querySelectorAll('.filters input, .filters select');
-    const durationDisplay = document.getElementById('playedDuration');
     filterInputs.forEach(input => input.addEventListener('input', debounce(() => renderGrid(allVideoData), 200)));
 
     // Restore filter values from localStorage
@@ -437,63 +482,67 @@
     // Attach saveFilterValues to all filter inputs
     filterInputs.forEach(input => input.addEventListener('input', saveFilterValues));
     document.getElementById('filterChannel').addEventListener('change', saveFilterValues);
-   
-    document.getElementById('hidePlayed').addEventListener('change', () => renderGrid(allVideoData));
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
-      localStorage.setItem('lastUsedFilename', file.name);
+
       const reader = new FileReader();
       reader.onload = function(event) {
-        allVideoData = parseCSV(event.target.result);
-        populateChannelFilter(allVideoData);
-        restoreFilterValues();
-        allVideoData.sort((a, b) => parseFloat(a.raw_difficulty_score) - parseFloat(b.raw_difficulty_score));
-        renderGrid(allVideoData);
+        const csvText = event.target.result;
+
+        // Persist CSV contents keyed by filename (overwrite if it already exists)
+        VideoLists.saveCsvText(file.name, csvText);
+        VideoLists.setLastUsed(file.name);
+
+        // Refresh dropdown and select the uploaded file
+        populateCsvSelect();
+        const select = document.getElementById('csvSelect');
+        if (select) select.value = file.name;
+
+        // Load into memory + render
+        loadAndRenderFromCsvText(csvText, file.name);
       };
+
       reader.readAsText(file);
     });
-    
-    document.getElementById('hidePlayed').addEventListener('change', () => renderGrid(allVideoData));
+
+    document.getElementById('csvSelect').addEventListener('change', (e) => {
+      const filename = e.target.value;
+      if (!filename) return;
+      const csvText = VideoLists.loadCsvText(filename);
+      if (!csvText) {
+        alert('Could not find stored CSV for: ' + filename);
+        return;
+      }
+      loadAndRenderFromCsvText(csvText, filename);
+    });
+    // (Removed duplicate hidePlayed change listener)
 
     document.getElementById('downloadPlayed').addEventListener('click', () => {
-      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
-      const blob = new Blob([JSON.stringify(played, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'played_videos.json';
-      a.click();
-      URL.revokeObjectURL(url);
+      Storage.downloadPlayedJson('played_videos.json');
     });
 
     document.getElementById('uploadPlayed').addEventListener('change', (e) => {
       const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        try {
-          const data = JSON.parse(event.target.result);
-          localStorage.setItem('playedVideos', JSON.stringify(data));
-          if (allVideoData.length > 0) renderGrid(allVideoData);
-        } catch (err) {
-          alert('Invalid JSON file');
-        }
-      };
-      reader.readAsText(file);
+      Storage.uploadPlayedJsonFile(file, () => {
+        if (allVideoData.length > 0) renderGrid(allVideoData);
+      });
     });
     
     function updatePlayedTimeDisplay() {
       const durationDisplay = document.getElementById('playedDuration');
-      const played = JSON.parse(localStorage.getItem('playedVideos') || '{}');
+      const played = Storage.getPlayedMap();
       let totalPlayedSeconds = 0;
       let playedTodaySeconds = 0;
+
+      const today = new Date();
+
       allVideoData.forEach(video => {
         if (played[video.video_id]) {
           totalPlayedSeconds += parseInt(video.duration, 10);
+
           const playedDate = new Date(played[video.video_id].timestamp);
-          const today = new Date();
           if (
             playedDate.getFullYear() === today.getFullYear() &&
             playedDate.getMonth() === today.getMonth() &&
@@ -503,65 +552,23 @@
           }
         }
       });
-      const hours = Math.floor(totalPlayedSeconds / 3600);
-      const minsRem = Math.floor((totalPlayedSeconds % 3600) / 60);
-      const secsRem = totalPlayedSeconds % 60;
-      const playedTodayHours = Math.floor(playedTodaySeconds / 3600);
-      const playedTodayMins = Math.floor((playedTodaySeconds % 3600) / 60);
-      const playedTodaySecs = playedTodaySeconds % 60;
-      durationDisplay.textContent = `Total Played Time: ${hours}:${minsRem.toString().padStart(2, '0')}:${secsRem.toString().padStart(2, '0')} | Played Today: ${playedTodayHours}:${playedTodayMins.toString().padStart(2, '0')}:${playedTodaySecs.toString().padStart(2, '0')}`;
+
+      durationDisplay.textContent = `Total Played Time: ${Time.secondsToHMS(totalPlayedSeconds)} | Played Today: ${Time.secondsToHMS(playedTodaySeconds)}`;
     }
     
-    function markAsExcluded(videoId) {
-      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
-      excluded[videoId] = true;
-      localStorage.setItem('excludedVideos', JSON.stringify(excluded));
-    }
-
-    function unmarkAsExcluded(videoId) {
-      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
-      delete excluded[videoId];
-      localStorage.setItem('excludedVideos', JSON.stringify(excluded));
-    }
-
-    function isExcluded(videoId) {
-      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
-      return excluded[videoId];
-    }
 
     document.getElementById('showExcluded').addEventListener('change', () => renderGrid(allVideoData));
     document.getElementById('showExcludedOnly').addEventListener('change', () => renderGrid(allVideoData));
 
     document.getElementById('downloadExcluded').addEventListener('click', () => {
-      const excluded = JSON.parse(localStorage.getItem('excludedVideos') || '{}');
-      const videoIds = Object.keys(excluded);
-      const blob = new Blob([JSON.stringify(videoIds, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'excluded_videos.json';
-      a.click();
-      URL.revokeObjectURL(url);
+      Storage.downloadExcludedJson('excluded_videos.json');
     });
 
     document.getElementById('uploadExcluded').addEventListener('change', (e) => {
       const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        try {
-          const data = JSON.parse(event.target.result);
-          localStorage.setItem('excludedVideos', JSON.stringify(
-            data.reduce((acc, key) => {
-              acc[key] = true;
-              return acc;
-            }, {})));
-          if (allVideoData.length > 0) renderGrid(allVideoData);
-        } catch (err) {
-          alert('Invalid JSON file');
-        }
-      };
-      reader.readAsText(file);
+      Storage.uploadExcludedJsonFile(file, () => {
+        if (allVideoData.length > 0) renderGrid(allVideoData);
+      });
     });
     
     function populateChannelFilter(data) {
@@ -595,6 +602,22 @@
         renderNextBatch();
       }
     });
+    // ===== Init saved list dropdown and auto-load last used list =====
+    populateCsvSelect();
+
+    (function autoLoadLastUsedList() {
+      const last = VideoLists.lastUsed() || '';
+      if (!last) return;
+
+      const csvText = VideoLists.loadCsvText(last);
+      if (!csvText) return;
+
+      // Ensure dropdown reflects last used
+      const select = document.getElementById('csvSelect');
+      if (select) select.value = last;
+
+      loadAndRenderFromCsvText(csvText, last);
+    })();
 </script>
 </body>
 </html>
