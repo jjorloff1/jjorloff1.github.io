@@ -24,13 +24,42 @@
     .close { color: #aaa; position: absolute; top: -4px; right: 2px; font-size: 28px; font-weight: bold; cursor: pointer; }
     iframe { width: 100%; height: 315px; }
     .controls { margin: 20px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; align-items: flex-start; }
     .filters input { width: 5em;  margin: 2px}
     .filterGroup {
       height: 3rem;
     }
     #filterTitleIncludes, #filterTitleExcludes { width: 10em; height: 1rem }
     #filterChannel { height: 3rem }
+
+    .filter-sets-panel {
+      /* Integrate with the filters row instead of hugging the far right */
+      margin-left: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-left: 10px;
+      border-left: 1px solid #ddd;
+      min-width: 260px;
+    }
+    .filter-sets-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #filterSetSelect { min-width: 220px; }
+    .filter-set-status-icon {
+      font-size: 16px;
+      line-height: 1;
+      cursor: default;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+    }
   </style>
 </head>
 <body>
@@ -58,7 +87,7 @@
     <input type="file" id="uploadExcluded" accept=".json">
   </div>
 
-  <div class="filters">
+    <div class="filters">
     <label>Channel:
       <select id="filterChannel" multiple size="2.5rem" style="min-width: 220px;"></select>
     </label>
@@ -70,9 +99,31 @@
     <div class="filterGroup">
       <label><input type="number" id="filterMinRaw" step="1"> - <input type="number" id="filterMaxRaw" step="1"> Raw Score</label><br />
       <label><input type="number" id="filterMinScaled" step="1"> - <input type="number" id="filterMaxScaled" step="1"> Scaled Score</label>
+      <div style="margin-top:6px; display:flex; justify-content:flex-end;">
+        <button id="clearFilters" type="button">Clear All Filters</button>
+      </div>
     </div>
 
-    <button id="clearFilters">Clear All Filters</button>
+    <div class="filter-sets-panel">
+      <div class="filter-sets-row">
+        <label style="font-weight:600;">Filter Set:</label>
+        <select id="filterSetSelect"></select>
+        <span id="filterSetStatusIcon" class="filter-set-status-icon" title="No set selected" aria-label="Filter set status">●</span>
+      </div>
+
+      <div class="filter-sets-row">
+        <button id="saveFilterSet" type="button">Save</button>
+        <button id="saveAsFilterSet" type="button">Save As…</button>
+        <button id="renameFilterSet" type="button">Rename</button>
+        <button id="deleteFilterSet" type="button">Delete</button>
+      </div>
+
+      <div class="filter-sets-row">
+        <button id="downloadFilterSets" type="button">Download Sets</button>
+        <button id="importFilterSetsBtn" type="button">Import Sets</button>
+        <input type="file" id="importFilterSets" accept=".json" style="display:none;" />
+      </div>
+    </div>
   </div>
 
   <div class="grid" id="videoGrid"></div>
@@ -87,6 +138,7 @@
   <script src="js/time.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/video-lists.js"></script>
+  <script src="js/video-filters.js"></script>
   <script src="js/player-modal.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script>
@@ -132,7 +184,7 @@
 
       allVideoData = parseCSV(csvText);
       populateChannelFilter(allVideoData);
-      restoreFilterValues();
+      VideoFilters.restore();
       allVideoData.sort((a, b) => parseFloat(a.raw_difficulty_score) - parseFloat(b.raw_difficulty_score));
       renderGrid(allVideoData);
     }
@@ -238,40 +290,9 @@
     }
 
     function renderGrid(data) {
-  const showExcluded = document.getElementById('showExcluded').checked;
-  const showExcludedOnly = document.getElementById('showExcludedOnly').checked;
-  const hidePlayed = document.getElementById('hidePlayed').checked;
-  const selectedChannels = Array.from(document.getElementById('filterChannel').selectedOptions).map(opt => opt.value);
-  // Split includes/excludes on comma, trim, and filter out empty strings
-  const titleIncludesArr = document.getElementById('filterTitleIncludes').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  const titleExcludesArr = document.getElementById('filterTitleExcludes').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  const minDuration = parseInt(document.getElementById('filterMinDuration').value, 10);
-  const maxDuration = parseInt(document.getElementById('filterMaxDuration').value, 10);
-  const minRaw = parseFloat(document.getElementById('filterMinRaw').value);
-  const maxRaw = parseFloat(document.getElementById('filterMaxRaw').value);
-  const minScaled = parseFloat(document.getElementById('filterMinScaled').value);
-  const maxScaled = parseFloat(document.getElementById('filterMaxScaled').value);
-
-      filteredVideoData = data.filter(video => {
-        if (!(showExcluded || showExcludedOnly) && Storage.isExcluded(video.video_id)) return false;
-        if (showExcludedOnly && !Storage.isExcluded(video.video_id)) return false;
-        if (hidePlayed && isPlayed(video.video_id)) return false;
-        if (selectedChannels.length && !selectedChannels.includes(video.channel_id)) return false;
-        const title = (video.title || '').toLowerCase();
-        // Title includes: must match ANY include
-        if (titleIncludesArr.length && !titleIncludesArr.some(inc => title.includes(inc))) return false;
-        // Title excludes: must NOT match ANY excludes
-        if (titleExcludesArr.length && titleExcludesArr.some(exc => title.includes(exc))) return false;
-        const dur = parseInt(video.duration, 10);
-        if (!isNaN(minDuration) && dur < minDuration) return false;
-        if (!isNaN(maxDuration) && dur > maxDuration) return false;
-        const raw = parseFloat(video.raw_difficulty_score);
-        if (!isNaN(minRaw) && raw < minRaw) return false;
-        if (!isNaN(maxRaw) && raw > maxRaw) return false;
-        const scaled = parseFloat(video.scaled_difficulty_score);
-        if (!isNaN(minScaled) && scaled < minScaled) return false;
-        if (!isNaN(maxScaled) && scaled > maxScaled) return false;
-        return true;
+      filteredVideoData = VideoFilters.filterData(data, {
+        isPlayed: isPlayed,
+        isExcluded: (id) => Storage.isExcluded(id)
       });
 
       currentRenderIndex = 0;
@@ -309,13 +330,6 @@
       }, 500);
     }
 
-    function debounce(fn, delay) {
-      let timer;
-      return function (...args) {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn.apply(this, args), delay);
-      };
-    }
 
     function createVideoCard(video) {
       const card = document.createElement('div');
@@ -417,71 +431,6 @@
       return card;
     }
 
-    const filterInputs = document.querySelectorAll('.filters input, .filters select');
-    filterInputs.forEach(input => input.addEventListener('input', debounce(() => renderGrid(allVideoData), 200)));
-
-    // Restore filter values from localStorage
-    function restoreFilterValues() {
-      const filterMap = {
-        filterTitleIncludes: 'value',
-        filterTitleExcludes: 'value',
-        filterMinDuration: 'value',
-        filterMaxDuration: 'value',
-        filterMinRaw: 'value',
-        filterMaxRaw: 'value',
-        filterMinScaled: 'value',
-        filterMaxScaled: 'value',
-        hidePlayed: 'checked',
-        showExcluded: 'checked',
-        showExcludedOnly: 'checked'
-      };
-      const saved = JSON.parse(localStorage.getItem('videoFilters') || '{}');
-      Object.entries(filterMap).forEach(([id, prop]) => {
-        const el = document.getElementById(id);
-        if (el && saved[id] !== undefined) {
-          el[prop] = saved[id];
-        }
-      });
-      // Restore channel selection
-      const channelSelect = document.getElementById('filterChannel');
-      if (channelSelect && Array.isArray(saved.filterChannel)) {
-        Array.from(channelSelect.options).forEach(opt => {
-          opt.selected = saved.filterChannel.includes(opt.value);
-        });
-      }
-    }
-
-    // Save filter values to localStorage on change
-    function saveFilterValues() {
-      const filterMap = {
-        filterTitleIncludes: 'value',
-        filterTitleExcludes: 'value',
-        filterMinDuration: 'value',
-        filterMaxDuration: 'value',
-        filterMinRaw: 'value',
-        filterMaxRaw: 'value',
-        filterMinScaled: 'value',
-        filterMaxScaled: 'value',
-        hidePlayed: 'checked',
-        showExcluded: 'checked',
-        showExcludedOnly: 'checked'
-      };
-      const filters = {};
-      Object.entries(filterMap).forEach(([id, prop]) => {
-        const el = document.getElementById(id);
-        if (el) filters[id] = el[prop];
-      });
-      // Save selected channels
-      const channelSelect = document.getElementById('filterChannel');
-      if (channelSelect) {
-        filters.filterChannel = Array.from(channelSelect.selectedOptions).map(opt => opt.value);
-      }
-      localStorage.setItem('videoFilters', JSON.stringify(filters));
-    }
-
-    // Attach saveFilterValues to all filter inputs
-    filterInputs.forEach(input => input.addEventListener('input', saveFilterValues));
-    document.getElementById('filterChannel').addEventListener('change', saveFilterValues);
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
       const file = e.target.files[0];
@@ -557,18 +506,6 @@
     }
     
 
-    document.getElementById('hidePlayed').addEventListener('change', () => {
-      saveFilterValues();
-      renderGrid(allVideoData);
-    });
-    document.getElementById('showExcluded').addEventListener('change', () => {
-      saveFilterValues();
-      renderGrid(allVideoData);
-    });
-    document.getElementById('showExcludedOnly').addEventListener('change', () => {
-      saveFilterValues();
-      renderGrid(allVideoData);
-    });
 
     document.getElementById('downloadExcluded').addEventListener('click', () => {
       Storage.downloadExcludedJson('excluded_videos.json');
@@ -593,17 +530,8 @@
       });
     }
 
-    document.getElementById('filterChannel').addEventListener('change', () => renderGrid(allVideoData));
     document.getElementById('clearFilters').addEventListener('click', () => {
-      document.getElementById('filterChannel').selectedIndex = -1;
-      document.getElementById('filterTitleIncludes').value = '';
-      document.getElementById('filterTitleExcludes').value = '';
-      document.getElementById('filterMinDuration').value = '';
-      document.getElementById('filterMaxDuration').value = '';
-      document.getElementById('filterMinRaw').value = '';
-      document.getElementById('filterMaxRaw').value = '';
-      document.getElementById('filterMinScaled').value = '';
-      document.getElementById('filterMaxScaled').value = '';
+      VideoFilters.clear();
       renderGrid(allVideoData);
     });
 
@@ -614,6 +542,12 @@
     });
     // ===== Init saved list dropdown and auto-load last used list =====
     populateCsvSelect();
+
+    VideoFilters.init({
+      render: () => renderGrid(allVideoData),
+      isPlayed: isPlayed,
+      isExcluded: (id) => Storage.isExcluded(id)
+    });
 
     (function autoLoadLastUsedList() {
       const last = VideoLists.lastUsed() || '';
