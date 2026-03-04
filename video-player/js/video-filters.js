@@ -68,7 +68,7 @@
   }
 
   function normalizeFiltersForCompare(filters) {
-    const f = JSON.parse(JSON.stringify(filters || {}));
+    const f = { ...DEFAULTS, ...JSON.parse(JSON.stringify(filters || {})) };
     if (Array.isArray(f.filterChannel)) {
       f.filterChannel = [...f.filterChannel].sort((a, b) =>
         String(a).localeCompare(String(b))
