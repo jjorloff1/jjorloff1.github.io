@@ -12,6 +12,7 @@
  *   VideoFilters.init({
  *     render: () => { ... },
  *     isPlayed: (videoId) => boolean,
+ *     isSoloPlayed: (videoId) => boolean,
  *     isExcluded: (videoId) => boolean
  *   })
  */
@@ -34,6 +35,7 @@
     filterMinScaled: '',
     filterMaxScaled: '',
     hidePlayed: true,
+    hideSoloPlayed: false,
     showExcluded: false,
     showExcludedOnly: false,
     filterChannel: []
@@ -41,6 +43,7 @@
 
   let _render = null;
   let _isPlayed = () => false;
+  let _isSoloPlayed = () => false;
   let _isExcluded = () => false;
 
   // ---------- small utils ----------
@@ -93,6 +96,7 @@
       filterMinScaled: 'value',
       filterMaxScaled: 'value',
       hidePlayed: 'checked',
+      hideSoloPlayed: 'checked',
       showExcluded: 'checked',
       showExcludedOnly: 'checked'
     };
@@ -128,6 +132,7 @@
       filterMinScaled: 'value',
       filterMaxScaled: 'value',
       hidePlayed: 'checked',
+      hideSoloPlayed: 'checked',
       showExcluded: 'checked',
       showExcludedOnly: 'checked'
     };
@@ -179,6 +184,7 @@
     const showExcluded = !!getEl('showExcluded')?.checked;
     const showExcludedOnly = !!getEl('showExcludedOnly')?.checked;
     const hidePlayed = !!getEl('hidePlayed')?.checked;
+    const hideSoloPlayed = !!getEl('hideSoloPlayed')?.checked;
 
     const selectedChannels = Array.from(
       getEl('filterChannel')?.selectedOptions || []
@@ -212,6 +218,7 @@
 
       // Played behavior
       if (hidePlayed && _isPlayed(id)) return false;
+      if (hideSoloPlayed && _isSoloPlayed(id)) return false;
 
       // Channel filter
       if (selectedChannels.length && !selectedChannels.includes(video.channel_id))
@@ -241,8 +248,9 @@
     };
   }
 
-  function filterData(data /* array */, { isPlayed, isExcluded } = {}) {
+  function filterData(data /* array */, { isPlayed, isSoloPlayed, isExcluded } = {}) {
     if (typeof isPlayed === 'function') _isPlayed = isPlayed;
+    if (typeof isSoloPlayed === 'function') _isSoloPlayed = isSoloPlayed;
     if (typeof isExcluded === 'function') _isExcluded = isExcluded;
     const predicate = getFilterPredicate();
     return (data || []).filter(predicate);
@@ -460,9 +468,10 @@
   }
 
   // ---------- wiring ----------
-  function init({ render, isPlayed, isExcluded } = {}) {
+  function init({ render, isPlayed, isSoloPlayed, isExcluded } = {}) {
     _render = typeof render === 'function' ? render : null;
     _isPlayed = typeof isPlayed === 'function' ? isPlayed : _isPlayed;
+    _isSoloPlayed = typeof isSoloPlayed === 'function' ? isSoloPlayed : _isSoloPlayed;
     _isExcluded = typeof isExcluded === 'function' ? isExcluded : _isExcluded;
 
     // populate dropdown immediately
@@ -494,7 +503,7 @@
       });
     }
 
-    ['hidePlayed', 'showExcluded', 'showExcludedOnly'].forEach((id) => {
+    ['hidePlayed', 'hideSoloPlayed', 'showExcluded', 'showExcludedOnly'].forEach((id) => {
       const el = getEl(id);
       if (!el) return;
       el.addEventListener('change', () => {

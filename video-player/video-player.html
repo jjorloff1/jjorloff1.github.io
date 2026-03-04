@@ -16,6 +16,7 @@
     .video-wrapper .thumbnail { display: block; width: 100%; height: auto; }
     .video-duration { position: absolute; bottom: 8px; right: 8px; background-color: rgba(0, 0, 0, 0.6); color: white; padding: 2px 6px; font-size: 0.75rem; border-radius: 3px; pointer-events: none; }
     .played-indicator { position: absolute; top: 5px; right: 5px; background: green; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; display: none; }
+    .solo-played-indicator { position: absolute; top: 5px; left: 5px; background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; display: none; }
     .video-info { font-size: 14px; margin-top: 8px; }
     .thumbnail { cursor: pointer; width: 100%; }
     .played-toggle { margin-top: 8px; display: flex; align-items: center; gap: 5px; }
@@ -24,6 +25,7 @@
     .close { color: #aaa; position: absolute; top: -4px; right: 2px; font-size: 28px; font-weight: bold; cursor: pointer; }
     iframe { width: 100%; height: 315px; }
     .controls { margin: 20px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .control-group { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
     .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; align-items: flex-start; }
     .filters input { width: 5em;  margin: 2px}
     .filterGroup {
@@ -78,13 +80,22 @@
     </label>
   </div>
   <div class="controls">
-    <label><input type="checkbox" id="hidePlayed" aria-checked="true" checked="checked"> Hide Played</label>
-    <button id="downloadPlayed">Download Played Videos</button>
-    <input type="file" id="uploadPlayed" accept=".json">
-    <label><input type="checkbox" id="showExcluded"> Show Excluded</label>
-    <label><input type="checkbox" id="showExcludedOnly"> Show Excluded Only</label>
-    <button id="downloadExcluded">Download Excluded Videos</button>
-    <input type="file" id="uploadExcluded" accept=".json">
+    <span class="control-group">
+      <label><input type="checkbox" id="hidePlayed" aria-checked="true" checked="checked"> Hide Played</label>
+      <button id="downloadPlayed">Download Played Videos</button>
+      <input type="file" id="uploadPlayed" accept=".json">
+    </span>
+    <span class="control-group">
+      <label><input type="checkbox" id="hideSoloPlayed"> Hide Solo Played</label>
+      <button id="downloadSoloPlayed">Download Solo Played</button>
+      <input type="file" id="uploadSoloPlayed" accept=".json">
+    </span>
+    <span class="control-group">
+      <label><input type="checkbox" id="showExcluded"> Show Excluded</label>
+      <label><input type="checkbox" id="showExcludedOnly"> Show Excluded Only</label>
+      <button id="downloadExcluded">Download Excluded Videos</button>
+      <input type="file" id="uploadExcluded" accept=".json">
+    </span>
   </div>
 
     <div class="filters">
@@ -203,6 +214,28 @@
       return Storage.isPlayed(videoId);
     }
 
+    function isSoloPlayed(videoId) {
+      return Storage.isSoloPlayed(videoId);
+    }
+
+    function markAsSoloPlayed(videoId) {
+      Storage.markSoloPlayed(videoId);
+      updateSoloPlayedIndicators(videoId);
+    }
+
+    function unmarkAsSoloPlayed(videoId) {
+      Storage.unmarkSoloPlayed(videoId);
+      updateSoloPlayedIndicators(videoId);
+    }
+
+    function updateSoloPlayedIndicators(videoId) {
+      document.querySelectorAll(`.video-card[data-id="${videoId}"] .solo-played-indicator`).forEach(el => {
+        el.style.display = isSoloPlayed(videoId) ? 'block' : 'none';
+      });
+      const toggle = document.getElementById(`solo-toggle-${videoId}`);
+      if (toggle) toggle.checked = isSoloPlayed(videoId);
+    }
+
     function updatePlayedIndicators(videoId) {
       updatePlayedTimeDisplay();
       document.querySelectorAll(`.video-card[data-id="${videoId}"] .played-indicator`).forEach(el => {
@@ -262,6 +295,33 @@
 
       container.appendChild(toggleWrap);
 
+      // Solo Played toggle inside modal
+      const soloToggleWrap = document.createElement('div');
+      soloToggleWrap.className = 'played-toggle';
+      const soloToggle = document.createElement('input');
+      soloToggle.type = 'checkbox';
+      soloToggle.id = `solo-toggle-${videoId}`;
+      soloToggle.checked = isSoloPlayed(videoId);
+      soloToggle.onchange = () => {
+        if (soloToggle.checked) {
+          markAsSoloPlayed(videoId);
+          if (document.getElementById('hideSoloPlayed').checked) {
+            fadeOutVideoCard(document.querySelector(`[data-id="${videoId}"]`), "Video marked as solo played. ", () => {
+              unmarkAsSoloPlayed(videoId);
+              renderGrid(allVideoData);
+            });
+          }
+        } else {
+          unmarkAsSoloPlayed(videoId);
+        }
+      };
+      const soloLabel = document.createElement('label');
+      soloLabel.htmlFor = `solo-toggle-${videoId}`;
+      soloLabel.textContent = 'Solo Played';
+      soloToggleWrap.appendChild(soloToggle);
+      soloToggleWrap.appendChild(soloLabel);
+      container.appendChild(soloToggleWrap);
+
       // Ensure indicator reflects current state
       indicator.style.display = isPlayed(videoId) ? 'block' : 'none';
     }
@@ -292,6 +352,7 @@
     function renderGrid(data) {
       filteredVideoData = VideoFilters.filterData(data, {
         isPlayed: isPlayed,
+        isSoloPlayed: isSoloPlayed,
         isExcluded: (id) => Storage.isExcluded(id)
       });
 
@@ -420,6 +481,29 @@
       toggleWrap.appendChild(excludeToggle);
       toggleWrap.appendChild(excludeLabel);
 
+      const soloToggle = document.createElement('input');
+      soloToggle.type = 'checkbox';
+      soloToggle.id = `solo-toggle-${video.video_id}`;
+      soloToggle.checked = isSoloPlayed(video.video_id);
+      soloToggle.onchange = () => {
+        if (soloToggle.checked) {
+          markAsSoloPlayed(video.video_id);
+          if (document.getElementById('hideSoloPlayed').checked) {
+            fadeOutVideoCard(card, "Video marked as solo played. ", () => {
+              unmarkAsSoloPlayed(video.video_id);
+              renderGrid(allVideoData);
+            });
+          }
+        } else {
+          unmarkAsSoloPlayed(video.video_id);
+        }
+      };
+      const soloLabel = document.createElement('label');
+      soloLabel.htmlFor = `solo-toggle-${video.video_id}`;
+      soloLabel.textContent = 'Solo';
+      toggleWrap.appendChild(soloToggle);
+      toggleWrap.appendChild(soloLabel);
+
       card.appendChild(toggleWrap);
 
       const badge = document.createElement('div');
@@ -427,6 +511,12 @@
       badge.textContent = 'Played';
       badge.style.display = isPlayed(video.video_id) ? 'block' : 'none';
       card.appendChild(badge);
+
+      const soloBadge = document.createElement('div');
+      soloBadge.className = 'solo-played-indicator';
+      soloBadge.textContent = 'Solo';
+      soloBadge.style.display = isSoloPlayed(video.video_id) ? 'block' : 'none';
+      card.appendChild(soloBadge);
 
       return card;
     }
@@ -475,6 +565,17 @@
     document.getElementById('uploadPlayed').addEventListener('change', (e) => {
       const file = e.target.files[0];
       Storage.uploadPlayedJsonFile(file, () => {
+        if (allVideoData.length > 0) renderGrid(allVideoData);
+      });
+    });
+
+    document.getElementById('downloadSoloPlayed').addEventListener('click', () => {
+      Storage.downloadSoloPlayedJson('solo_played_videos.json');
+    });
+
+    document.getElementById('uploadSoloPlayed').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      Storage.uploadSoloPlayedJsonFile(file, () => {
         if (allVideoData.length > 0) renderGrid(allVideoData);
       });
     });
@@ -546,6 +647,7 @@
     VideoFilters.init({
       render: () => renderGrid(allVideoData),
       isPlayed: isPlayed,
+      isSoloPlayed: isSoloPlayed,
       isExcluded: (id) => Storage.isExcluded(id)
     });
 

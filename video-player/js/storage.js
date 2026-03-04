@@ -62,6 +62,68 @@
     reader.readAsText(file);
   }
 
+  // ===== Solo Played videos =====
+  const SOLO_PLAYED_KEY = 'soloPlayedVideos';
+
+  function getSoloPlayedMap() {
+    try {
+      return JSON.parse(localStorage.getItem(SOLO_PLAYED_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  function setSoloPlayedMap(map) {
+    localStorage.setItem(SOLO_PLAYED_KEY, JSON.stringify(map || {}));
+  }
+
+  function isSoloPlayed(videoId) {
+    const soloPlayed = getSoloPlayedMap();
+    return !!soloPlayed[videoId];
+  }
+
+  function markSoloPlayed(videoId, extra) {
+    const soloPlayed = getSoloPlayedMap();
+    soloPlayed[videoId] = {
+      played: true,
+      timestamp: new Date().toISOString(),
+      ...(extra || {})
+    };
+    setSoloPlayedMap(soloPlayed);
+  }
+
+  function unmarkSoloPlayed(videoId) {
+    const soloPlayed = getSoloPlayedMap();
+    delete soloPlayed[videoId];
+    setSoloPlayedMap(soloPlayed);
+  }
+
+  function downloadSoloPlayedJson(filename = 'solo_played_videos.json') {
+    const soloPlayed = getSoloPlayedMap();
+    const blob = new Blob([JSON.stringify(soloPlayed, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function uploadSoloPlayedJsonFile(file, onDone) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        setSoloPlayedMap(data);
+        if (typeof onDone === 'function') onDone(data);
+      } catch {
+        alert('Invalid JSON file');
+      }
+    };
+    reader.readAsText(file);
+  }
+
   // ===== Excluded videos =====
   function getExcludedMap() {
     try {
@@ -137,6 +199,15 @@
     unmarkPlayed,
     downloadPlayedJson,
     uploadPlayedJsonFile,
+
+    SOLO_PLAYED_KEY,
+    getSoloPlayedMap,
+    setSoloPlayedMap,
+    isSoloPlayed,
+    markSoloPlayed,
+    unmarkSoloPlayed,
+    downloadSoloPlayedJson,
+    uploadSoloPlayedJsonFile,
 
     EXCLUDED_KEY,
     getExcludedMap,
