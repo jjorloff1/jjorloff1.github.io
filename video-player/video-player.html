@@ -16,6 +16,7 @@
     .video-wrapper .thumbnail { display: block; width: 100%; height: auto; }
     .video-duration { position: absolute; bottom: 8px; right: 8px; background-color: rgba(0, 0, 0, 0.6); color: white; padding: 2px 6px; font-size: 0.75rem; border-radius: 3px; pointer-events: none; }
     .played-indicator { position: absolute; top: 5px; right: 5px; background: green; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; display: none; }
+    .modal-played-indicator { top: 12px; right: 40px; z-index: 1; }
     .solo-played-indicator { position: absolute; top: 5px; left: 5px; background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; display: none; }
     .video-info { font-size: 14px; margin-top: 8px; }
     .thumbnail { cursor: pointer; width: 100%; }
@@ -255,7 +256,7 @@
 
       // Played indicator (kept from previous behavior)
       const indicator = document.createElement('div');
-      indicator.className = 'played-indicator';
+      indicator.className = 'played-indicator modal-played-indicator';
       indicator.style.display = isPlayed(videoId) ? 'block' : 'none';
       indicator.textContent = 'Played';
 
