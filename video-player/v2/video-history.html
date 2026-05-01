@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Japanese Video History V2</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="app-topbar" aria-label="History toolbar">
+    <div class="brand-block">
+      <span class="brand-mark" aria-hidden="true">見</span>
+      <h1 class="brand-title">Video History</h1>
+      <a class="topbar-link" href="video-player.html">Back to player</a>
+    </div>
+
+    <div class="topbar-grow"></div>
+
+    <div class="topbar-group" aria-label="Played time">
+      <span class="stat-chip"><span class="label">Today</span><span id="playedTodayValue">0:00:00</span></span>
+      <span class="stat-chip"><span class="label">Total</span><span id="playedTotalValue">0:00:00</span></span>
+    </div>
+
+    <div class="topbar-divider" aria-hidden="true"></div>
+
+    <div class="topbar-group">
+      <button id="downloadPlayed" class="btn btn-sm btn-app" type="button">Download Played</button>
+      <label class="btn btn-sm btn-app mb-0" for="uploadPlayed">Import Played</label>
+      <input class="d-none" type="file" id="uploadPlayed" accept=".json">
+    </div>
+  </header>
+
+  <main class="history-layout">
+    <section class="chart-grid" aria-label="Study charts">
+      <article class="chart-card">
+        <div class="chart-header">
+          <h2 class="chart-title" id="cumulativeTitle">Cumulative Study Time (30 Days)</h2>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Cumulative chart range">
+            <button id="showThirtyDays" class="btn btn-app active" type="button" aria-pressed="true">30 Days</button>
+            <button id="showAllHistory" class="btn btn-app" type="button" aria-pressed="false">All Time</button>
+          </div>
+        </div>
+        <canvas id="chartCumulative"></canvas>
+        <div id="lifetime" class="lifetime-note">Total lifetime study duration - 0:00:00</div>
+      </article>
+
+      <article class="chart-card">
+        <div class="chart-header">
+          <h2 class="chart-title">Hours Studied per Week (12 weeks)</h2>
+        </div>
+        <canvas id="chartWeekly"></canvas>
+      </article>
+    </section>
+
+    <section aria-label="Historical activity">
+      <h2 class="history-section-title">Historical Activity</h2>
+      <div id="historyRoot" class="history-days"></div>
+    </section>
+  </main>
+
+  <div id="videoModal" class="modal" role="dialog" aria-modal="true" aria-label="Video player">
+    <div class="modal-content">
+      <button id="closeModal" class="close" type="button" aria-label="Close">&times;</button>
+      <div id="video-player"></div>
+    </div>
+  </div>
+
+  <script src="js/time.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/video-lists.js"></script>
+  <script src="js/player-modal.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/history-page.js"></script>
+</body>
+</html>

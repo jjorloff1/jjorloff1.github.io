@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Japanese Videos V2</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="app-topbar" aria-label="Application toolbar">
+    <div class="brand-block">
+      <span class="brand-mark" aria-hidden="true">見</span>
+      <h1 class="brand-title">Japanese Videos</h1>
+      <a class="topbar-link" href="video-history.html">History</a>
+    </div>
+
+    <div class="topbar-divider" aria-hidden="true"></div>
+
+    <div class="topbar-group">
+      <input class="d-none" type="file" id="csvFile" accept=".csv">
+      <label class="btn btn-sm btn-accent mb-0" for="csvFile">Load CSV</label>
+      <label class="compact-label" for="csvSelect">Saved List</label>
+      <select id="csvSelect" class="form-select form-select-sm saved-list-select"></select>
+    </div>
+
+    <div class="topbar-grow"></div>
+
+    <div class="topbar-group" aria-label="Played time">
+      <span class="stat-chip"><span class="label">Today</span><span id="playedTodayValue">0:00:00</span></span>
+      <span class="stat-chip"><span class="label">Total</span><span id="playedTotalValue">0:00:00</span></span>
+    </div>
+
+    <div class="dropdown">
+      <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        Download
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><button class="dropdown-item" id="downloadPlayed" type="button">Played videos</button></li>
+        <li><button class="dropdown-item" id="downloadSoloPlayed" type="button">Solo played videos</button></li>
+        <li><button class="dropdown-item" id="downloadExcluded" type="button">Excluded videos</button></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><button class="dropdown-item" id="downloadFilterSets" type="button">Filter sets</button></li>
+      </ul>
+    </div>
+
+    <div class="dropdown">
+      <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        Import
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><label class="dropdown-item mb-0" for="uploadPlayed">Played JSON</label></li>
+        <li><label class="dropdown-item mb-0" for="uploadSoloPlayed">Solo played JSON</label></li>
+        <li><label class="dropdown-item mb-0" for="uploadExcluded">Excluded JSON</label></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><button class="dropdown-item" id="importFilterSetsBtn" type="button">Filter sets JSON</button></li>
+      </ul>
+      <input class="d-none" type="file" id="uploadPlayed" accept=".json">
+      <input class="d-none" type="file" id="uploadSoloPlayed" accept=".json">
+      <input class="d-none" type="file" id="uploadExcluded" accept=".json">
+      <input class="d-none" type="file" id="importFilterSets" accept=".json">
+    </div>
+  </header>
+
+  <main class="app-layout">
+    <aside class="filter-rail filters" aria-label="Filters">
+      <div class="panel filter-panel">
+        <section class="filter-card hero" aria-labelledby="filterSetHeading">
+          <div class="section-title">
+            <h2 id="filterSetHeading">Filter Set</h2>
+            <span id="filterSetStatusIcon" class="filter-set-status-icon" title="No set selected" aria-label="No filter set selected">○</span>
+          </div>
+          <select id="filterSetSelect" class="form-select"></select>
+          <div class="filter-set-actions">
+            <button id="saveFilterSet" class="btn btn-sm btn-accent flex-fill" type="button">Save</button>
+            <button id="saveAsFilterSet" class="btn btn-sm btn-app flex-fill" type="button">Save As</button>
+            <div class="dropdown">
+              <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">More</button>
+              <ul class="dropdown-menu">
+                <li><button id="renameFilterSet" class="dropdown-item" type="button">Rename</button></li>
+                <li><button id="deleteFilterSet" class="dropdown-item text-danger" type="button">Delete</button></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <div class="filter-field-card channel-field">
+          <label class="form-label" for="filterChannel">Channel</label>
+          <select id="filterChannel" class="form-select channel-select" multiple size="12"></select>
+        </div>
+        <div class="filter-field-card title-includes-field">
+          <label class="form-label" for="filterTitleIncludes">Title Includes</label>
+          <input type="text" id="filterTitleIncludes" class="form-control" placeholder="Comma-separated words">
+        </div>
+        <div class="filter-field-card title-excludes-field">
+          <label class="form-label" for="filterTitleExcludes">Title Excludes</label>
+          <input type="text" id="filterTitleExcludes" class="form-control" placeholder="Comma-separated words">
+        </div>
+
+        <div class="accordion app-accordion" id="filterAccordion">
+          <section class="accordion-item visibility-filter-card">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#visibilityFilters" aria-expanded="false" aria-controls="visibilityFilters">
+                Playback Visibility
+              </button>
+            </h2>
+            <div id="visibilityFilters" class="accordion-collapse collapse" data-bs-parent="#filterAccordion">
+              <div class="accordion-body field-stack">
+                <label class="form-check">
+                  <input class="form-check-input" type="checkbox" id="hidePlayed" checked>
+                  <span class="form-check-label">Hide Played</span>
+                </label>
+                <label class="form-check">
+                  <input class="form-check-input" type="checkbox" id="hideSoloPlayed">
+                  <span class="form-check-label">Hide Solo Played</span>
+                </label>
+                <label class="form-check">
+                  <input class="form-check-input" type="checkbox" id="showExcluded">
+                  <span class="form-check-label">Show Excluded</span>
+                </label>
+                <label class="form-check">
+                  <input class="form-check-input" type="checkbox" id="showExcludedOnly">
+                  <span class="form-check-label">Show Excluded Only</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="accordion-item advanced-filter-card mt-2">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilters" aria-expanded="false" aria-controls="advancedFilters">
+                Advanced Filters
+              </button>
+            </h2>
+            <div id="advancedFilters" class="accordion-collapse collapse" data-bs-parent="#filterAccordion">
+              <div class="accordion-body field-stack">
+                <div>
+                  <label class="form-label">Duration Seconds</label>
+                  <div class="range-row">
+                    <input type="number" id="filterMinDuration" class="form-control" placeholder="Min">
+                    <span>to</span>
+                    <input type="number" id="filterMaxDuration" class="form-control" placeholder="Max">
+                  </div>
+                </div>
+                <div>
+                  <label class="form-label">Raw Score</label>
+                  <div class="range-row">
+                    <input type="number" id="filterMinRaw" class="form-control" step="1" placeholder="Min">
+                    <span>to</span>
+                    <input type="number" id="filterMaxRaw" class="form-control" step="1" placeholder="Max">
+                  </div>
+                </div>
+                <div>
+                  <label class="form-label">Scaled Score</label>
+                  <div class="range-row">
+                    <input type="number" id="filterMinScaled" class="form-control" step="1" placeholder="Min">
+                    <span>to</span>
+                    <input type="number" id="filterMaxScaled" class="form-control" step="1" placeholder="Max">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </aside>
+
+    <section class="main-pane" aria-label="Videos">
+      <div class="results-toolbar">
+        <div class="results-count" id="resultsCount">0 videos</div>
+        <div class="results-counts" aria-label="Stored list counts">
+          <span class="count-chip played"><span class="label">Played</span><span id="playedCount">0</span></span>
+          <span class="count-chip solo"><span class="label">Solo</span><span id="soloPlayedCount">0</span></span>
+          <span class="count-chip excluded"><span class="label">Excluded</span><span id="excludedCount">0</span></span>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <label class="compact-label" for="sortVideos">Sort</label>
+        <select id="sortVideos" class="form-select form-select-sm" style="width: 190px;">
+          <option value="rawAsc">Raw score ↑</option>
+          <option value="rawDesc">Raw score ↓</option>
+          <option value="scaledAsc">Scaled score ↑</option>
+          <option value="scaledDesc">Scaled score ↓</option>
+          <option value="durationAsc">Duration ↑</option>
+          <option value="durationDesc">Duration ↓</option>
+          <option value="titleAsc">Title A-Z</option>
+          <option value="channelAsc">Channel A-Z</option>
+        </select>
+        <div class="btn-group btn-group-sm view-toggle" role="group" aria-label="Display mode">
+          <button id="gridMode" class="btn btn-app active" type="button" aria-pressed="true">Grid</button>
+          <button id="listMode" class="btn btn-app" type="button" aria-pressed="false">List</button>
+        </div>
+        <button id="clearFilters" class="btn btn-sm btn-app" type="button">Clear Filters</button>
+      </div>
+
+      <div id="videoGrid" class="video-grid"></div>
+    </section>
+  </main>
+
+  <div id="videoModal" class="modal" role="dialog" aria-modal="true" aria-label="Video player">
+    <div class="modal-content">
+      <button id="closeModal" class="close" type="button" aria-label="Close">&times;</button>
+      <div id="video-player"></div>
+    </div>
+  </div>
+
+  <script src="js/time.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/video-lists.js"></script>
+  <script src="js/video-filters.js"></script>
+  <script src="js/player-modal.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/player-page.js"></script>
+</body>
+</html>
