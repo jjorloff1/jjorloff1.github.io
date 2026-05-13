@@ -16,56 +16,58 @@
       <a class="topbar-link" href="video-history.html">History</a>
     </div>
 
-    <div class="topbar-divider" aria-hidden="true"></div>
-
-    <div class="topbar-group">
-      <input class="d-none" type="file" id="csvFile" accept=".csv">
-      <label class="btn btn-sm btn-accent mb-0" for="csvFile">Load CSV</label>
-      <label class="compact-label" for="csvSelect">Saved List</label>
-      <select id="csvSelect" class="form-select form-select-sm saved-list-select"></select>
-    </div>
-
     <div class="topbar-grow"></div>
 
     <div class="topbar-group" aria-label="Played time">
       <span class="stat-chip"><span class="label">Today</span><span id="playedTodayValue">0:00:00</span></span>
       <span class="stat-chip"><span class="label">Total</span><span id="playedTotalValue">0:00:00</span></span>
     </div>
-
-    <div class="dropdown">
-      <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-        Download
-      </button>
-      <ul class="dropdown-menu dropdown-menu-end">
-        <li><button class="dropdown-item" id="downloadPlayed" type="button">Played videos</button></li>
-        <li><button class="dropdown-item" id="downloadSoloPlayed" type="button">Solo played videos</button></li>
-        <li><button class="dropdown-item" id="downloadExcluded" type="button">Excluded videos</button></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><button class="dropdown-item" id="downloadFilterSets" type="button">Filter sets</button></li>
-      </ul>
-    </div>
-
-    <div class="dropdown">
-      <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-        Import
-      </button>
-      <ul class="dropdown-menu dropdown-menu-end">
-        <li><label class="dropdown-item mb-0" for="uploadPlayed">Played JSON</label></li>
-        <li><label class="dropdown-item mb-0" for="uploadSoloPlayed">Solo played JSON</label></li>
-        <li><label class="dropdown-item mb-0" for="uploadExcluded">Excluded JSON</label></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><button class="dropdown-item" id="importFilterSetsBtn" type="button">Filter sets JSON</button></li>
-      </ul>
-      <input class="d-none" type="file" id="uploadPlayed" accept=".json">
-      <input class="d-none" type="file" id="uploadSoloPlayed" accept=".json">
-      <input class="d-none" type="file" id="uploadExcluded" accept=".json">
-      <input class="d-none" type="file" id="importFilterSets" accept=".json">
-    </div>
   </header>
 
   <main class="app-layout">
     <aside class="filter-rail filters" aria-label="Filters">
       <div class="panel filter-panel">
+        <section class="filter-card hero list-data-card" aria-labelledby="listDataHeading">
+          <div class="section-title">
+            <h2 id="listDataHeading">Video Lists and Data</h2>
+          </div>
+          <input class="d-none" type="file" id="csvFile" accept=".csv">
+          <label class="form-label" for="csvSelect">Saved List</label>
+          <select id="csvSelect" class="form-select saved-list-select"></select>
+          <div class="list-data-actions">
+            <div class="dropdown flex-fill">
+              <button class="btn btn-sm btn-app dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Download
+              </button>
+              <ul class="dropdown-menu">
+                <li><button class="dropdown-item" id="downloadPlayed" type="button">Played videos</button></li>
+                <li><button class="dropdown-item" id="downloadSoloPlayed" type="button">Profile watched data</button></li>
+                <li><button class="dropdown-item" id="downloadExcluded" type="button">Excluded videos</button></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><button class="dropdown-item" id="downloadFilterSets" type="button">Filter sets</button></li>
+              </ul>
+            </div>
+            <div class="dropdown flex-fill">
+              <button class="btn btn-sm btn-app dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Import
+              </button>
+              <ul class="dropdown-menu">
+                <li><label class="dropdown-item mb-0" for="csvFile">Video List</label></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><label class="dropdown-item mb-0" for="uploadPlayed">Played JSON</label></li>
+                <li><label class="dropdown-item mb-0" id="uploadSoloPlayedLabel" for="uploadSoloPlayed">Profile watched JSON</label></li>
+                <li><label class="dropdown-item mb-0" for="uploadExcluded">Excluded JSON</label></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><button class="dropdown-item" id="importFilterSetsBtn" type="button">Filter sets JSON</button></li>
+              </ul>
+              <input class="d-none" type="file" id="uploadPlayed" accept=".json">
+              <input class="d-none" type="file" id="uploadSoloPlayed" accept=".json">
+              <input class="d-none" type="file" id="uploadExcluded" accept=".json">
+              <input class="d-none" type="file" id="importFilterSets" accept=".json">
+            </div>
+          </div>
+        </section>
+
         <section class="filter-card hero" aria-labelledby="filterSetHeading">
           <div class="section-title">
             <h2 id="filterSetHeading">Filter Set</h2>
@@ -111,10 +113,13 @@
                   <input class="form-check-input" type="checkbox" id="hidePlayed" checked>
                   <span class="form-check-label">Hide Played</span>
                 </label>
-                <label class="form-check">
-                  <input class="form-check-input" type="checkbox" id="hideSoloPlayed">
-                  <span class="form-check-label">Hide Solo Played</span>
-                </label>
+                <div class="solo-profile-filter" aria-label="Solo profile visibility rules">
+                  <div class="profile-visibility-header">
+                    <div class="compact-label">Profile Visibility</div>
+                    <button id="addSoloProfile" class="btn btn-sm btn-accent profile-rule-action" type="button">Add</button>
+                  </div>
+                  <div id="soloVisibilityRules" class="solo-visibility-rules"></div>
+                </div>
                 <label class="form-check">
                   <input class="form-check-input" type="checkbox" id="showExcluded">
                   <span class="form-check-label">Show Excluded</span>
@@ -171,7 +176,7 @@
         <div class="results-count" id="resultsCount">0 videos</div>
         <div class="results-counts" aria-label="Stored list counts">
           <span class="count-chip played"><span class="label">Played</span><span id="playedCount">0</span></span>
-          <span class="count-chip solo"><span class="label">Solo</span><span id="soloPlayedCount">0</span></span>
+          <span class="count-chip solo" id="soloProfileCounts" title="Profile watched counts"><span class="label">Seen</span><span id="soloPlayedCount">J 0 / N 0 / T 0</span></span>
           <span class="count-chip excluded"><span class="label">Excluded</span><span id="excludedCount">0</span></span>
         </div>
         <div class="toolbar-spacer"></div>

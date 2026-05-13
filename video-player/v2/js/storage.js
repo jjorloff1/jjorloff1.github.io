@@ -2,6 +2,218 @@
 (function () {
   const PLAYED_KEY = 'playedVideos';
   const EXCLUDED_KEY = 'excludedVideos';
+  const SOLO_PLAYED_KEY = 'soloPlayedVideos';
+  const SOLO_PROFILES_KEY = 'soloProfiles';
+  const ACTIVE_SOLO_PROFILE_KEY = 'activeSoloProfileId';
+  const SOLO_VISIBILITY_PROFILE_IDS_KEY = 'soloVisibilityProfileIds';
+  const SOLO_WATCHED_BY_PROFILE_KEY = 'soloWatchedByProfile';
+  const SOLO_MIGRATION_KEY = 'soloProfilesMigratedFromSoloPlayedVideos';
+  const DEFAULT_SOLO_PROFILES = [
+    { id: 'jesse', name: 'Jesse' },
+    { id: 'naomi', name: 'Naomi' },
+    { id: 'titus', name: 'Titus' }
+  ];
+
+  function safeParseObject(key, fallback) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function safeParseArray(key, fallback) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+      return Array.isArray(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function normalizeProfile(profile) {
+    if (!profile || typeof profile !== 'object') return null;
+    const id = String(profile.id || '').trim();
+    const name = String(profile.name || '').trim();
+    if (!id || !name) return null;
+    return { id, name };
+  }
+
+  function getSoloProfiles() {
+    const stored = safeParseArray(SOLO_PROFILES_KEY, []);
+    const profiles = stored.map(normalizeProfile).filter(Boolean);
+    if (profiles.length) return profiles;
+    setSoloProfiles(DEFAULT_SOLO_PROFILES);
+    return DEFAULT_SOLO_PROFILES.slice();
+  }
+
+  function setSoloProfiles(profiles) {
+    const normalized = (profiles || []).map(normalizeProfile).filter(Boolean);
+    localStorage.setItem(SOLO_PROFILES_KEY, JSON.stringify(normalized));
+  }
+
+  function getValidSoloProfileIds(profileIds) {
+    const validIds = new Set(getSoloProfiles().map((profile) => profile.id));
+    return (Array.isArray(profileIds) ? profileIds : []).filter((id, index, arr) =>
+      typeof id === 'string' &&
+      validIds.has(id) &&
+      arr.indexOf(id) === index
+    );
+  }
+
+  function makeProfileNameFromId(profileId) {
+    return String(profileId || 'Profile')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function mergeImportedProfiles(importedProfiles, profileIds) {
+    const existing = getSoloProfiles();
+    const existingIds = new Set(existing.map((profile) => profile.id));
+    const importedById = (Array.isArray(importedProfiles) ? importedProfiles : [])
+      .map(normalizeProfile)
+      .filter(Boolean)
+      .reduce((acc, profile) => {
+        acc[profile.id] = profile;
+        return acc;
+      }, {});
+
+    const additions = (profileIds || [])
+      .filter((id, index, arr) =>
+        typeof id === 'string' &&
+        id.trim() &&
+        !existingIds.has(id) &&
+        arr.indexOf(id) === index
+      )
+      .map((id) => importedById[id] || { id, name: makeProfileNameFromId(id) });
+
+    if (additions.length) setSoloProfiles(existing.concat(additions));
+  }
+
+  function makeSoloProfileId(name) {
+    const profiles = getSoloProfiles();
+    const existingIds = new Set(profiles.map((profile) => profile.id));
+    const base = String(name || 'profile')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'profile';
+    let id = base;
+    let index = 2;
+    while (existingIds.has(id)) {
+      id = `${base}-${index}`;
+      index += 1;
+    }
+    return id;
+  }
+
+  function getActiveSoloProfileId() {
+    const profiles = getSoloProfiles();
+    const fallback = profiles[0]?.id || DEFAULT_SOLO_PROFILES[0].id;
+    const saved = localStorage.getItem(ACTIVE_SOLO_PROFILE_KEY) || fallback;
+    if (profiles.some((profile) => profile.id === saved)) return saved;
+    setActiveSoloProfileId(fallback);
+    return fallback;
+  }
+
+  function setActiveSoloProfileId(profileId) {
+    const profiles = getSoloProfiles();
+    const next = profiles.some((profile) => profile.id === profileId)
+      ? profileId
+      : profiles[0]?.id;
+    if (next) localStorage.setItem(ACTIVE_SOLO_PROFILE_KEY, next);
+  }
+
+  function getActiveSoloProfile() {
+    const id = getActiveSoloProfileId();
+    return getSoloProfiles().find((profile) => profile.id === id) || getSoloProfiles()[0];
+  }
+
+  function addSoloProfile(name) {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) return null;
+    const profiles = getSoloProfiles();
+    const profile = { id: makeSoloProfileId(trimmed), name: trimmed };
+    setSoloProfiles(profiles.concat(profile));
+    return profile;
+  }
+
+  function renameSoloProfile(profileId, name) {
+    const trimmed = String(name || '').trim();
+    if (!profileId || !trimmed) return false;
+    const profiles = getSoloProfiles();
+    const next = profiles.map((profile) =>
+      profile.id === profileId ? { ...profile, name: trimmed } : profile
+    );
+    setSoloProfiles(next);
+    return true;
+  }
+
+  function getSoloWatchedByProfileMap() {
+    return safeParseObject(SOLO_WATCHED_BY_PROFILE_KEY, {});
+  }
+
+  function normalizeSoloPlayedMap(map) {
+    return map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+  }
+
+  function setSoloWatchedByProfileMap(map) {
+    localStorage.setItem(SOLO_WATCHED_BY_PROFILE_KEY, JSON.stringify(map || {}));
+  }
+
+  function deleteSoloProfile(profileId) {
+    const profiles = getSoloProfiles();
+    if (profiles.length <= 1) return false;
+
+    const nextProfiles = profiles.filter((profile) => profile.id !== profileId);
+    if (nextProfiles.length === profiles.length) return false;
+
+    const watched = getSoloWatchedByProfileMap();
+    delete watched[profileId];
+    setSoloWatchedByProfileMap(watched);
+    setSoloProfiles(nextProfiles);
+
+    if (getActiveSoloProfileId() === profileId) {
+      setActiveSoloProfileId(nextProfiles[0].id);
+    }
+
+    const selected = getSoloVisibilityProfileIds().filter((id) => id !== profileId);
+    setSoloVisibilityProfileIds(selected);
+    return true;
+  }
+
+  function getSoloVisibilityProfileIds() {
+    const profiles = getSoloProfiles();
+    const validIds = new Set(profiles.map((profile) => profile.id));
+    const raw = localStorage.getItem(SOLO_VISIBILITY_PROFILE_IDS_KEY);
+    if (raw == null) return profiles.map((profile) => profile.id);
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((id) => validIds.has(id));
+    } catch {
+      return [];
+    }
+  }
+
+  function setSoloVisibilityProfileIds(profileIds) {
+    const validIds = new Set(getSoloProfiles().map((profile) => profile.id));
+    const next = (profileIds || []).filter((id, index, arr) =>
+      validIds.has(id) && arr.indexOf(id) === index
+    );
+    localStorage.setItem(SOLO_VISIBILITY_PROFILE_IDS_KEY, JSON.stringify(next));
+  }
+
+  function getEffectiveSoloVisibilityProfileIds(profileIds) {
+    const profiles = getSoloProfiles();
+    const validIds = new Set(profiles.map((profile) => profile.id));
+    const selected = Array.isArray(profileIds) ? profileIds : getSoloVisibilityProfileIds();
+    const normalized = selected.filter((id, index, arr) =>
+      validIds.has(id) && arr.indexOf(id) === index
+    );
+    return normalized.length ? normalized : [getActiveSoloProfileId()].filter(Boolean);
+  }
 
   function getPlayedMap() {
     try {
@@ -63,43 +275,116 @@
   }
 
   // ===== Solo Played videos =====
-  const SOLO_PLAYED_KEY = 'soloPlayedVideos';
-
-  function getSoloPlayedMap() {
-    try {
-      return JSON.parse(localStorage.getItem(SOLO_PLAYED_KEY) || '{}');
-    } catch {
-      return {};
-    }
+  function getSoloPlayedMap(profileId) {
+    const targetProfileId = profileId || getActiveSoloProfileId();
+    const watched = getSoloWatchedByProfileMap();
+    const map = watched[targetProfileId];
+    return normalizeSoloPlayedMap(map);
   }
 
-  function setSoloPlayedMap(map) {
-    localStorage.setItem(SOLO_PLAYED_KEY, JSON.stringify(map || {}));
+  function setSoloPlayedMap(map, profileId) {
+    const targetProfileId = profileId || getActiveSoloProfileId();
+    const watched = getSoloWatchedByProfileMap();
+    watched[targetProfileId] = map || {};
+    setSoloWatchedByProfileMap(watched);
   }
 
-  function isSoloPlayed(videoId) {
-    const soloPlayed = getSoloPlayedMap();
+  function isSoloPlayed(videoId, profileId) {
+    const soloPlayed = getSoloPlayedMap(profileId);
     return !!soloPlayed[videoId];
   }
 
-  function markSoloPlayed(videoId, extra) {
-    const soloPlayed = getSoloPlayedMap();
+  function isSoloPlayedByAnyProfile(videoId, profileIds) {
+    return getEffectiveSoloVisibilityProfileIds(profileIds).some((profileId) =>
+      isSoloPlayed(videoId, profileId)
+    );
+  }
+
+  function markSoloPlayed(videoId, extra, profileId) {
+    const targetProfileId = profileId || getActiveSoloProfileId();
+    const soloPlayed = getSoloPlayedMap(targetProfileId);
     soloPlayed[videoId] = {
       played: true,
       timestamp: new Date().toISOString(),
       ...(extra || {})
     };
-    setSoloPlayedMap(soloPlayed);
+    setSoloPlayedMap(soloPlayed, targetProfileId);
   }
 
-  function unmarkSoloPlayed(videoId) {
-    const soloPlayed = getSoloPlayedMap();
+  function unmarkSoloPlayed(videoId, profileId) {
+    const targetProfileId = profileId || getActiveSoloProfileId();
+    const soloPlayed = getSoloPlayedMap(targetProfileId);
     delete soloPlayed[videoId];
-    setSoloPlayedMap(soloPlayed);
+    setSoloPlayedMap(soloPlayed, targetProfileId);
   }
 
-  function downloadSoloPlayedJson(filename = 'solo_played_videos.json') {
-    const soloPlayed = getSoloPlayedMap();
+  function getSoloWatchers(videoId, profileIds) {
+    const profilesById = getSoloProfiles().reduce((acc, profile) => {
+      acc[profile.id] = profile;
+      return acc;
+    }, {});
+    const ids = Array.isArray(profileIds)
+      ? getEffectiveSoloVisibilityProfileIds(profileIds)
+      : getSoloProfiles().map((profile) => profile.id);
+    return ids
+      .filter((profileId) => profilesById[profileId] && isSoloPlayed(videoId, profileId))
+      .map((profileId) => profilesById[profileId]);
+  }
+
+  function getSoloWatcherProfileIds(videoId) {
+    return getSoloProfiles()
+      .map((profile) => profile.id)
+      .filter((profileId) => isSoloPlayed(videoId, profileId));
+  }
+
+  function setSoloWatcherProfileIds(videoId, profileIds) {
+    if (!videoId) return;
+    const nextIds = new Set(getValidSoloProfileIds(profileIds));
+    const watched = getSoloWatchedByProfileMap();
+    const now = new Date().toISOString();
+
+    getSoloProfiles().forEach((profile) => {
+      const map = normalizeSoloPlayedMap(watched[profile.id]);
+      if (nextIds.has(profile.id)) {
+        if (!map[videoId]) {
+          map[videoId] = { played: true, timestamp: now };
+        }
+      } else {
+        delete map[videoId];
+      }
+
+      if (Object.keys(map).length) watched[profile.id] = map;
+      else delete watched[profile.id];
+    });
+
+    setSoloWatchedByProfileMap(watched);
+  }
+
+  function getSoloWatchedCountsByProfile() {
+    const watched = getSoloWatchedByProfileMap();
+    return getSoloProfiles().reduce((acc, profile) => {
+      acc[profile.id] = Object.keys(normalizeSoloPlayedMap(watched[profile.id])).length;
+      return acc;
+    }, {});
+  }
+
+  function buildSoloProfilesWatchedPayload() {
+    const profiles = getSoloProfiles();
+    const watched = getSoloWatchedByProfileMap();
+    const watchedByProfile = profiles.reduce((acc, profile) => {
+      acc[profile.id] = normalizeSoloPlayedMap(watched[profile.id]);
+      return acc;
+    }, {});
+    return {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      profiles,
+      watchedByProfile
+    };
+  }
+
+  function downloadSoloPlayedJson(filename = 'solo_played_videos.json', profileId) {
+    const soloPlayed = getSoloPlayedMap(profileId);
     const blob = new Blob([JSON.stringify(soloPlayed, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -109,19 +394,100 @@
     URL.revokeObjectURL(url);
   }
 
-  function uploadSoloPlayedJsonFile(file, onDone) {
+  function downloadSoloProfilesWatchedJson(filename = 'solo_profiles_watched.json') {
+    const blob = new Blob([JSON.stringify(buildSoloProfilesWatchedPayload(), null, 2)], {
+      type: 'application/json'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function chooseLegacySoloImportProfileId() {
+    const profiles = getSoloProfiles();
+    const options = profiles
+      .map((profile, index) => `${index + 1}. ${profile.name}`)
+      .join('\n');
+    const answer = prompt(
+      `Import this legacy solo watched JSON into which profile?\n\n${options}\n\nEnter a number, name, or profile id:`,
+      '1'
+    );
+    if (!answer) return null;
+
+    const trimmed = answer.trim();
+    const index = parseInt(trimmed, 10);
+    if (!Number.isNaN(index) && profiles[index - 1]) return profiles[index - 1].id;
+
+    const normalized = trimmed.toLowerCase();
+    const profile = profiles.find((item) =>
+      item.id.toLowerCase() === normalized ||
+      item.name.toLowerCase() === normalized
+    );
+    if (profile) return profile.id;
+
+    alert('No matching profile was found for that import target.');
+    return null;
+  }
+
+  function importSoloProfilesWatchedData(data, profileId) {
+    if (data?.watchedByProfile && typeof data.watchedByProfile === 'object' && !Array.isArray(data.watchedByProfile)) {
+      const incomingIds = Object.keys(data.watchedByProfile).filter((id) =>
+        id.trim() &&
+        data.watchedByProfile[id] &&
+        typeof data.watchedByProfile[id] === 'object' &&
+        !Array.isArray(data.watchedByProfile[id])
+      );
+      mergeImportedProfiles(data.profiles, incomingIds);
+      const watched = getSoloWatchedByProfileMap();
+      incomingIds.forEach((id) => {
+        watched[id] = normalizeSoloPlayedMap(data.watchedByProfile[id]);
+      });
+      setSoloWatchedByProfileMap(watched);
+      return { type: 'bundle', profileIds: incomingIds };
+    }
+
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      alert('Invalid profile watched JSON');
+      return null;
+    }
+
+    const targetProfileId = profileId || chooseLegacySoloImportProfileId();
+    if (!targetProfileId) return null;
+    setSoloPlayedMap(normalizeSoloPlayedMap(data), targetProfileId);
+    return { type: 'legacy', profileIds: [targetProfileId] };
+  }
+
+  function uploadSoloPlayedJsonFile(file, onDone, profileId) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target.result);
-        setSoloPlayedMap(data);
-        if (typeof onDone === 'function') onDone(data);
+        const result = importSoloProfilesWatchedData(data, profileId);
+        if (result && typeof onDone === 'function') onDone(result);
       } catch {
         alert('Invalid JSON file');
       }
     };
     reader.readAsText(file);
+  }
+
+  function migrateSoloPlayedToProfiles() {
+    if (localStorage.getItem(SOLO_MIGRATION_KEY)) return;
+
+    const legacy = safeParseObject(SOLO_PLAYED_KEY, {});
+    const legacyIds = Object.keys(legacy);
+    if (legacyIds.length) {
+      const watched = getSoloWatchedByProfileMap();
+      const existing = watched.jesse && typeof watched.jesse === 'object' ? watched.jesse : {};
+      watched.jesse = { ...legacy, ...existing };
+      setSoloWatchedByProfileMap(watched);
+    }
+
+    localStorage.setItem(SOLO_MIGRATION_KEY, new Date().toISOString());
   }
 
   // ===== Excluded videos =====
@@ -201,12 +567,36 @@
     uploadPlayedJsonFile,
 
     SOLO_PLAYED_KEY,
+    SOLO_PROFILES_KEY,
+    ACTIVE_SOLO_PROFILE_KEY,
+    SOLO_VISIBILITY_PROFILE_IDS_KEY,
+    SOLO_WATCHED_BY_PROFILE_KEY,
+    DEFAULT_SOLO_PROFILES,
+    getSoloProfiles,
+    setSoloProfiles,
+    getActiveSoloProfileId,
+    setActiveSoloProfileId,
+    getActiveSoloProfile,
+    addSoloProfile,
+    renameSoloProfile,
+    deleteSoloProfile,
+    getSoloVisibilityProfileIds,
+    setSoloVisibilityProfileIds,
+    getEffectiveSoloVisibilityProfileIds,
+    getSoloWatchedByProfileMap,
+    setSoloWatchedByProfileMap,
     getSoloPlayedMap,
     setSoloPlayedMap,
     isSoloPlayed,
+    isSoloPlayedByAnyProfile,
     markSoloPlayed,
     unmarkSoloPlayed,
+    getSoloWatchers,
+    getSoloWatcherProfileIds,
+    setSoloWatcherProfileIds,
+    getSoloWatchedCountsByProfile,
     downloadSoloPlayedJson,
+    downloadSoloProfilesWatchedJson,
     uploadSoloPlayedJsonFile,
 
     EXCLUDED_KEY,
@@ -218,4 +608,6 @@
     downloadExcludedJson,
     uploadExcludedJsonFile
   };
+
+  migrateSoloPlayedToProfiles();
 })();

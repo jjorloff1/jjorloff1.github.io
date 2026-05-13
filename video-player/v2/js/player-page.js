@@ -20,6 +20,131 @@
     return Object.keys(map || {}).length;
   }
 
+  function normalizeProfileIds(profileIds) {
+    const validIds = new Set(Storage.getSoloProfiles().map((profile) => profile.id));
+    return (Array.isArray(profileIds) ? profileIds : []).filter((id, index, arr) =>
+      typeof id === 'string' &&
+      validIds.has(id) &&
+      arr.indexOf(id) === index
+    );
+  }
+
+  function profileIdsEqual(a, b) {
+    const left = normalizeProfileIds(a).slice().sort();
+    const right = normalizeProfileIds(b).slice().sort();
+    return left.length === right.length && left.every((id, index) => id === right[index]);
+  }
+
+  function parseProfileIds(value) {
+    try {
+      const parsed = JSON.parse(value || '[]');
+      return normalizeProfileIds(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  function getProfileInitial(profile) {
+    return String(profile?.name || '')
+      .trim()
+      .charAt(0)
+      .toUpperCase();
+  }
+
+  function getVideoWatcherProfileIds(videoId) {
+    if (window.Storage?.getSoloWatcherProfileIds) {
+      return Storage.getSoloWatcherProfileIds(videoId);
+    }
+    return Storage.getSoloWatchers(videoId).map((profile) => profile.id);
+  }
+
+  function getSelectedSoloWatchers(videoId) {
+    return Storage.getSoloWatchers(videoId);
+  }
+
+  function formatSoloIndicatorText(watchers) {
+    return (watchers || [])
+      .map(getProfileInitial)
+      .filter(Boolean)
+      .join(',');
+  }
+
+  function formatSoloPopoverContent(videoId) {
+    const watchers = getSelectedSoloWatchers(videoId);
+    if (!watchers.length) return 'No profiles have seen this';
+    return `Seen by: ${watchers.map(formatSoloWatcherLabel).join(', ')}`;
+  }
+
+  function applySoloPopover(element, videoId) {
+    if (!element) return;
+    element.dataset.soloPopover = 'true';
+    element.setAttribute('data-bs-toggle', 'popover');
+    element.setAttribute('data-bs-trigger', 'hover focus click');
+    element.setAttribute('data-bs-placement', 'top');
+    element.setAttribute('data-bs-container', 'body');
+    element.setAttribute('data-bs-content', formatSoloPopoverContent(videoId));
+  }
+
+  function refreshSoloPopovers(scope) {
+    if (!window.bootstrap?.Popover) return;
+    (scope || document).querySelectorAll('[data-solo-popover="true"]').forEach((element) => {
+      const existing = window.bootstrap.Popover.getInstance(element);
+      if (existing) existing.dispose();
+      window.bootstrap.Popover.getOrCreateInstance(element);
+    });
+  }
+
+  function disposeSoloPopovers(scope) {
+    if (!window.bootstrap?.Popover) return;
+    (scope || document).querySelectorAll('[data-solo-popover="true"]').forEach((element) => {
+      const existing = window.bootstrap.Popover.getInstance(element);
+      if (existing) existing.dispose();
+    });
+  }
+
+  function shouldHideForSolo(videoId) {
+    const watchers = Storage.getSoloWatchers(videoId);
+    if (!watchers.length) return false;
+    const rules = getSoloVisibilityRulesFromControls();
+    const hideIds = new Set(rules.hideProfileIds);
+    const alwaysShowIds = new Set(rules.alwaysShowProfileIds);
+    return watchers.some((profile) => hideIds.has(profile.id)) &&
+      !watchers.some((profile) => alwaysShowIds.has(profile.id));
+  }
+
+  function getSoloVisibilityRulesFromControls() {
+    const hideProfileIds = [];
+    const alwaysShowProfileIds = [];
+    document
+      .querySelectorAll('#soloVisibilityRules input[type="radio"]:checked')
+      .forEach((input) => {
+        if (input.value === 'hide') hideProfileIds.push(input.dataset.profileId);
+        if (input.value === 'show') alwaysShowProfileIds.push(input.dataset.profileId);
+      });
+    return { hideProfileIds, alwaysShowProfileIds };
+  }
+
+  function getSoloRuleForProfile(profileId) {
+    const checked = document.querySelector(
+      `#soloVisibilityRules input[type="radio"][data-profile-id="${CSS.escape(profileId)}"]:checked`
+    );
+    return checked?.value || 'default';
+  }
+
+  function formatSoloWatcherLabel(profile) {
+    const rule = getSoloRuleForProfile(profile.id);
+    if (rule === 'hide') return `${profile.name} (Hide)`;
+    if (rule === 'show') return `${profile.name} (Always Show)`;
+    return profile.name;
+  }
+
+  function updateSoloDownloadLabels() {
+    const download = getEl('downloadSoloPlayed');
+    const upload = getEl('uploadSoloPlayedLabel');
+    if (download) download.textContent = 'Profile watched data';
+    if (upload) upload.textContent = 'Profile watched JSON';
+  }
+
   function parseCSV(text) {
     return VideoCatalog.parseCsvText(text);
   }
@@ -63,6 +188,133 @@
     });
   }
 
+  function addSoloProfile() {
+    const name = prompt('New profile name:');
+    if (!name) return;
+    Storage.addSoloProfile(name);
+    renderProfileControls();
+    if (window.VideoFilters?.save) VideoFilters.save();
+    renderGrid(allVideoData);
+  }
+
+  function renameSoloProfile(profileId) {
+    const profile = Storage.getSoloProfiles().find((item) => item.id === profileId);
+    if (!profile) return;
+    const nextName = prompt('Rename profile:', profile.name);
+    if (!nextName) return;
+    Storage.renameSoloProfile(profile.id, nextName);
+    renderProfileControls();
+    if (window.VideoFilters?.save) VideoFilters.save();
+    renderGrid(allVideoData);
+  }
+
+  function deleteSoloProfile(profileId) {
+    const profile = Storage.getSoloProfiles().find((item) => item.id === profileId);
+    if (!profile) return;
+    if (Storage.getSoloProfiles().length <= 1) {
+      alert('At least one profile is required.');
+      return;
+    }
+    const ok = confirm(`Delete profile "${profile.name}" and its watched data?`);
+    if (!ok) return;
+    Storage.deleteSoloProfile(profile.id);
+    renderProfileControls();
+    if (window.VideoFilters?.save) VideoFilters.save();
+    renderGrid(allVideoData);
+  }
+
+  function renderSoloVisibilityControls() {
+    const container = getEl('soloVisibilityRules');
+    if (!container) return;
+
+    const currentRules = getSoloVisibilityRulesFromControls();
+    const hideIds = new Set(currentRules.hideProfileIds);
+    const alwaysShowIds = new Set(currentRules.alwaysShowProfileIds);
+    container.innerHTML = '';
+
+    Storage.getSoloProfiles().forEach((profile) => {
+      const row = document.createElement('div');
+      row.className = 'solo-rule-row';
+
+      const rowHeader = document.createElement('div');
+      rowHeader.className = 'solo-rule-header';
+
+      const name = document.createElement('div');
+      name.className = 'solo-rule-name';
+      name.textContent = profile.name;
+      name.title = profile.name;
+
+      const actions = document.createElement('div');
+      actions.className = 'profile-rule-actions';
+
+      const renameButton = document.createElement('button');
+      renameButton.className = 'btn btn-sm btn-app profile-rule-action';
+      renameButton.type = 'button';
+      renameButton.textContent = 'Rename';
+      renameButton.addEventListener('click', () => renameSoloProfile(profile.id));
+
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'btn btn-sm btn-app profile-rule-action';
+      deleteButton.type = 'button';
+      deleteButton.textContent = 'Delete';
+      deleteButton.addEventListener('click', () => deleteSoloProfile(profile.id));
+
+      actions.appendChild(renameButton);
+      actions.appendChild(deleteButton);
+      rowHeader.appendChild(name);
+      rowHeader.appendChild(actions);
+
+      const options = document.createElement('div');
+      options.className = 'btn-group btn-group-sm solo-rule-options';
+      options.setAttribute('role', 'group');
+      options.setAttribute('aria-label', `${profile.name} visibility rule`);
+
+      const selectedValue = alwaysShowIds.has(profile.id)
+        ? 'show'
+        : hideIds.has(profile.id)
+          ? 'hide'
+          : 'default';
+
+      [
+        { value: 'default', label: 'Default' },
+        { value: 'hide', label: 'Hide' },
+        { value: 'show', label: 'Always Show' }
+      ].forEach((option) => {
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.className = 'btn-check solo-rule-input';
+        input.name = `solo-rule-${profile.id}`;
+        input.id = `solo-rule-${profile.id}-${option.value}`;
+        input.value = option.value;
+        input.dataset.profileId = profile.id;
+        input.checked = option.value === selectedValue;
+        input.addEventListener('change', () => {
+          if (!input.checked) return;
+          if (window.VideoFilters?.save) VideoFilters.save();
+          renderGrid(allVideoData);
+        });
+
+        const label = document.createElement('label');
+        label.className = 'btn btn-app';
+        label.htmlFor = input.id;
+        label.textContent = option.label;
+
+        options.appendChild(input);
+        options.appendChild(label);
+      });
+
+      row.appendChild(rowHeader);
+      row.appendChild(options);
+      container.appendChild(row);
+    });
+  }
+
+  function renderProfileControls() {
+    renderSoloVisibilityControls();
+    updateSoloDownloadLabels();
+    updateTopbarStats();
+  }
+
   function getSortValue() {
     return getEl('sortVideos')?.value || 'rawAsc';
   }
@@ -94,13 +346,22 @@
     return Storage.isPlayed(videoId);
   }
 
-  function isSoloPlayed(videoId) {
-    return Storage.isSoloPlayed(videoId);
+  function isSoloPlayed(videoId, soloRules) {
+    if (soloRules && typeof soloRules === 'object' && !Array.isArray(soloRules)) {
+      const watchers = Storage.getSoloWatchers(videoId);
+      if (!watchers.length) return false;
+      const hideIds = new Set(soloRules.hideProfileIds || []);
+      const alwaysShowIds = new Set(soloRules.alwaysShowProfileIds || []);
+      return watchers.some((profile) => hideIds.has(profile.id)) &&
+        !watchers.some((profile) => alwaysShowIds.has(profile.id));
+    }
+    if (Array.isArray(soloRules)) return Storage.isSoloPlayedByAnyProfile(videoId, soloRules);
+    return getVideoWatcherProfileIds(videoId).length > 0;
   }
 
   function updateTopbarStats() {
     const played = Storage.getPlayedMap();
-    const solo = Storage.getSoloPlayedMap();
+    const soloCounts = Storage.getSoloWatchedCountsByProfile?.() || {};
     const excluded = Storage.getExcludedMap();
 
     let totalPlayedSeconds = 0;
@@ -129,35 +390,58 @@
     getEl('playedTodayValue').textContent = Time.secondsToHMS(playedTodaySeconds);
     getEl('playedTotalValue').textContent = Time.secondsToHMS(totalPlayedSeconds);
     getEl('playedCount').textContent = String(countKeys(played));
-    getEl('soloPlayedCount').textContent = String(countKeys(solo));
+    const profiles = Storage.getSoloProfiles();
+    const summary = profiles
+      .map((profile) => `${getProfileInitial(profile)} ${soloCounts[profile.id] || 0}`)
+      .join(' / ');
+    getEl('soloPlayedCount').textContent = summary || '0';
+    const profileCountChip = getEl('soloProfileCounts');
+    if (profileCountChip) {
+      profileCountChip.title = profiles
+        .map((profile) => `${profile.name}: ${soloCounts[profile.id] || 0}`)
+        .join('\n');
+    }
     getEl('excludedCount').textContent = String(countKeys(excluded));
   }
 
   function updateCardState(videoId) {
     document.querySelectorAll(`.video-card[data-id="${CSS.escape(videoId)}"]`).forEach((card) => {
       const played = Storage.isPlayed(videoId);
-      const solo = Storage.isSoloPlayed(videoId);
       const excluded = Storage.isExcluded(videoId);
+      const soloWatchers = getSelectedSoloWatchers(videoId);
+      const solo = soloWatchers.length > 0;
 
       const playedBadge = card.querySelector('.status-badge.played');
       const soloBadge = card.querySelector('.status-badge.solo');
       const excludedBadge = card.querySelector('.status-badge.excluded');
       if (playedBadge) playedBadge.style.display = played ? 'inline-flex' : 'none';
-      if (soloBadge) soloBadge.style.display = solo ? 'inline-flex' : 'none';
+      if (soloBadge) {
+        soloBadge.textContent = formatSoloIndicatorText(soloWatchers);
+        soloBadge.style.display = soloWatchers.length ? 'inline-flex' : 'none';
+        applySoloPopover(soloBadge, videoId);
+      }
       if (excludedBadge) excludedBadge.style.display = excluded ? 'inline-flex' : 'none';
 
       const playedToggle = card.querySelector('.played-toggle-control');
-      const soloToggle = card.querySelector('.solo-toggle-control');
+      const soloToggle = card.querySelector('.seen-by-toggle-control');
       const excludedToggle = card.querySelector('.excluded-toggle-control');
       if (playedToggle) setToggleButtonState(playedToggle, played);
-      if (soloToggle) setToggleButtonState(soloToggle, solo);
+      if (soloToggle) {
+        soloToggle.textContent = 'Seen By';
+        setToggleButtonState(soloToggle, solo);
+      }
+      const seenByMenu = card.querySelector('.seen-by-menu');
+      if (seenByMenu && !seenByMenu.classList.contains('show')) {
+        setProfileChecklistSelections(seenByMenu, getVideoWatcherProfileIds(videoId));
+      }
       if (excludedToggle) setToggleButtonState(excludedToggle, excluded);
+      refreshSoloPopovers(card);
     });
 
     const modalPlayed = getEl(`modal-played-${videoId}`);
-    const modalSolo = getEl(`modal-solo-${videoId}`);
+    const modalSeenBy = getEl(`modal-seen-by-${videoId}`);
     if (modalPlayed) modalPlayed.checked = Storage.isPlayed(videoId);
-    if (modalSolo) modalSolo.checked = Storage.isSoloPlayed(videoId);
+    if (modalSeenBy) setProfileChecklistSelections(modalSeenBy, getVideoWatcherProfileIds(videoId));
 
     updateTopbarStats();
   }
@@ -202,12 +486,12 @@
     }
   }
 
-  function markSoloPlayed(video, card) {
-    Storage.markSoloPlayed(video.video_id);
+  function saveVideoWatcherProfileIds(video, card, nextProfileIds, previousProfileIds) {
+    Storage.setSoloWatcherProfileIds(video.video_id, nextProfileIds);
     updateCardState(video.video_id);
-    if (getEl('hideSoloPlayed')?.checked) {
-      fadeOutVideoCard(card, 'Video marked as solo played.', () => {
-        Storage.unmarkSoloPlayed(video.video_id);
+    if (shouldHideForSolo(video.video_id)) {
+      fadeOutVideoCard(card, 'Profile watched selection saved.', () => {
+        Storage.setSoloWatcherProfileIds(video.video_id, previousProfileIds || []);
         renderGrid(allVideoData);
       });
     }
@@ -239,6 +523,52 @@
     button.setAttribute('aria-pressed', String(pressed));
   }
 
+  function getCheckedProfileIds(scope) {
+    return normalizeProfileIds(
+      Array.from(scope.querySelectorAll('.profile-watcher-input:checked'))
+        .map((input) => input.value)
+    );
+  }
+
+  function setProfileChecklistSelections(scope, profileIds) {
+    const selected = new Set(normalizeProfileIds(profileIds));
+    scope.querySelectorAll('.profile-watcher-input').forEach((input) => {
+      input.checked = selected.has(input.value);
+    });
+  }
+
+  function createProfileWatcherChecklist(videoId, idPrefix, selectedProfileIds, onChange) {
+    const list = document.createElement('div');
+    list.className = 'profile-watcher-list';
+    list.id = idPrefix;
+
+    const selected = new Set(normalizeProfileIds(selectedProfileIds));
+    Storage.getSoloProfiles().forEach((profile) => {
+      const row = document.createElement('label');
+      row.className = 'form-check profile-watcher-check';
+
+      const input = document.createElement('input');
+      input.className = 'form-check-input profile-watcher-input';
+      input.type = 'checkbox';
+      input.value = profile.id;
+      input.id = `${idPrefix}-${profile.id}`;
+      input.checked = selected.has(profile.id);
+      input.addEventListener('change', () => {
+        if (typeof onChange === 'function') onChange(getCheckedProfileIds(list));
+      });
+
+      const label = document.createElement('span');
+      label.className = 'form-check-label';
+      label.textContent = profile.name;
+
+      row.appendChild(input);
+      row.appendChild(label);
+      list.appendChild(row);
+    });
+
+    return list;
+  }
+
   function createActionPill(video, card, type, label, checked, onChange) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -250,6 +580,48 @@
       onChange(nextPressed);
     });
     return button;
+  }
+
+  function createSeenByDropdown(video, card) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'dropdown seen-by-dropdown';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'action-pill solo seen-by-toggle-control dropdown-toggle';
+    button.textContent = 'Seen By';
+    button.setAttribute('data-bs-toggle', 'dropdown');
+    button.setAttribute('data-bs-auto-close', 'outside');
+    button.setAttribute('aria-expanded', 'false');
+    setToggleButtonState(button, getVideoWatcherProfileIds(video.video_id).length > 0);
+
+    const menu = document.createElement('div');
+    menu.className = 'dropdown-menu seen-by-menu';
+    menu.setAttribute('aria-label', 'Profiles who watched this video');
+    menu.appendChild(
+      createProfileWatcherChecklist(
+        video.video_id,
+        `seen-by-${video.video_id}`,
+        getVideoWatcherProfileIds(video.video_id)
+      )
+    );
+
+    wrapper.addEventListener('show.bs.dropdown', () => {
+      const currentIds = getVideoWatcherProfileIds(video.video_id);
+      menu.dataset.previousProfileIds = JSON.stringify(currentIds);
+      setProfileChecklistSelections(menu, currentIds);
+    });
+
+    wrapper.addEventListener('hidden.bs.dropdown', () => {
+      const previousIds = parseProfileIds(menu.dataset.previousProfileIds);
+      const nextIds = getCheckedProfileIds(menu);
+      if (profileIdsEqual(previousIds, nextIds)) return;
+      saveVideoWatcherProfileIds(video, card, nextIds, previousIds);
+    });
+
+    wrapper.appendChild(button);
+    wrapper.appendChild(menu);
+    return wrapper;
   }
 
   function createVideoCard(video) {
@@ -269,8 +641,11 @@
 
     const statuses = document.createElement('div');
     statuses.className = 'status-stack';
+    const soloWatchers = getSelectedSoloWatchers(video.video_id);
+    const soloBadge = createStatusBadge('solo', formatSoloIndicatorText(soloWatchers), soloWatchers.length > 0);
+    applySoloPopover(soloBadge, video.video_id);
     statuses.appendChild(createStatusBadge('played', 'Played', Storage.isPlayed(video.video_id)));
-    statuses.appendChild(createStatusBadge('solo', 'Solo', Storage.isSoloPlayed(video.video_id)));
+    statuses.appendChild(soloBadge);
     statuses.appendChild(createStatusBadge('excluded', 'Excluded', Storage.isExcluded(video.video_id)));
 
     const duration = document.createElement('div');
@@ -307,13 +682,7 @@
         updateCardState(video.video_id);
       }
     }));
-    actions.appendChild(createActionPill(video, card, 'solo', 'Solo', Storage.isSoloPlayed(video.video_id), (checked) => {
-      if (checked) markSoloPlayed(video, card);
-      else {
-        Storage.unmarkSoloPlayed(video.video_id);
-        updateCardState(video.video_id);
-      }
-    }));
+    actions.appendChild(createSeenByDropdown(video, card));
     actions.appendChild(createActionPill(video, card, 'excluded', 'Excluded', Storage.isExcluded(video.video_id), (checked) => {
       if (checked) markExcluded(video, card);
       else {
@@ -340,6 +709,7 @@
     }
 
     currentRenderIndex = end;
+    refreshSoloPopovers(grid);
   }
 
   function renderEmptyState(message) {
@@ -360,6 +730,7 @@
     }));
 
     currentRenderIndex = 0;
+    disposeSoloPopovers(grid);
     grid.innerHTML = '';
     getEl('resultsCount').textContent = `${filteredVideoData.length.toLocaleString()} video${filteredVideoData.length === 1 ? '' : 's'}`;
 
@@ -517,23 +888,26 @@
     playedToggleWrap.appendChild(playedToggle);
     playedToggleWrap.appendChild(document.createTextNode('Played'));
 
-    const soloToggleWrap = document.createElement('label');
-    soloToggleWrap.className = 'played-toggle';
-    const soloToggle = document.createElement('input');
-    soloToggle.type = 'checkbox';
-    soloToggle.id = `modal-solo-${videoId}`;
-    soloToggle.checked = Storage.isSoloPlayed(videoId);
-    soloToggle.addEventListener('change', () => {
-      if (soloToggle.checked) Storage.markSoloPlayed(videoId);
-      else Storage.unmarkSoloPlayed(videoId);
-      updateCardState(videoId);
-      if (getEl('hideSoloPlayed')?.checked) renderGrid(allVideoData);
-    });
-    soloToggleWrap.appendChild(soloToggle);
-    soloToggleWrap.appendChild(document.createTextNode('Solo Played'));
+    const seenByPanel = document.createElement('section');
+    seenByPanel.className = 'modal-seen-by';
+    const seenByTitle = document.createElement('h2');
+    seenByTitle.className = 'modal-seen-by-title';
+    seenByTitle.textContent = 'Seen By';
+    const seenByList = createProfileWatcherChecklist(
+      videoId,
+      `modal-seen-by-${videoId}`,
+      getVideoWatcherProfileIds(videoId),
+      (nextProfileIds) => {
+        Storage.setSoloWatcherProfileIds(videoId, nextProfileIds);
+        updateCardState(videoId);
+        if (shouldHideForSolo(videoId)) renderGrid(allVideoData);
+      }
+    );
+    seenByPanel.appendChild(seenByTitle);
+    seenByPanel.appendChild(seenByList);
 
     container.appendChild(playedToggleWrap);
-    container.appendChild(soloToggleWrap);
+    container.appendChild(seenByPanel);
     container.appendChild(createModalMetadata(video, videoId));
   }
 
@@ -580,8 +954,12 @@
       loadAndRenderFromCsvText(csvText, filename);
     });
 
+    getEl('addSoloProfile')?.addEventListener('click', addSoloProfile);
+
     getEl('downloadPlayed').addEventListener('click', () => Storage.downloadPlayedJson('played_videos.json'));
-    getEl('downloadSoloPlayed').addEventListener('click', () => Storage.downloadSoloPlayedJson('solo_played_videos.json'));
+    getEl('downloadSoloPlayed').addEventListener('click', () =>
+      Storage.downloadSoloProfilesWatchedJson('profile_watched_data.json')
+    );
     getEl('downloadExcluded').addEventListener('click', () => Storage.downloadExcludedJson('excluded_videos.json'));
 
     getEl('uploadPlayed').addEventListener('change', (e) => {
@@ -589,7 +967,10 @@
       e.target.value = '';
     });
     getEl('uploadSoloPlayed').addEventListener('change', (e) => {
-      Storage.uploadSoloPlayedJsonFile(e.target.files[0], () => renderGrid(allVideoData));
+      Storage.uploadSoloPlayedJsonFile(e.target.files[0], () => {
+        renderProfileControls();
+        renderGrid(allVideoData);
+      });
       e.target.value = '';
     });
     getEl('uploadExcluded').addEventListener('change', (e) => {
@@ -633,6 +1014,8 @@
       modalId: 'videoModal',
       playerContainerId: 'video-player'
     });
+
+    renderProfileControls();
 
     VideoFilters.init({
       render: () => renderGrid(allVideoData),

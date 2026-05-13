@@ -12,7 +12,7 @@
  *   VideoFilters.init({
  *     render: () => { ... },
  *     isPlayed: (videoId) => boolean,
- *     isSoloPlayed: (videoId) => boolean,
+ *     isSoloPlayed: (videoId, soloRules) => boolean,
  *     isExcluded: (videoId) => boolean
  *   })
  */
@@ -35,7 +35,8 @@
     filterMinScaled: '',
     filterMaxScaled: '',
     hidePlayed: true,
-    hideSoloPlayed: false,
+    soloHideProfileIds: [],
+    soloAlwaysShowProfileIds: [],
     showExcluded: false,
     showExcludedOnly: false,
     filterChannel: []
@@ -67,10 +68,69 @@
     return document.getElementById(id);
   }
 
+  function uniqueProfileIds(profileIds) {
+    const validIds = window.Storage?.getSoloProfiles
+      ? new Set(window.Storage.getSoloProfiles().map((profile) => profile.id))
+      : null;
+    return (Array.isArray(profileIds) ? profileIds : [])
+      .filter((id, index, arr) =>
+        typeof id === 'string' &&
+        (!validIds || validIds.has(id)) &&
+        arr.indexOf(id) === index
+      );
+  }
+
+  function getActiveProfileFallbackIds() {
+    return [window.Storage?.getActiveSoloProfileId?.()].filter(Boolean);
+  }
+
+  function normalizeLegacySoloFilters(filters) {
+    const source = filters || {};
+    const f = { ...source };
+    const hasNewHide = Array.isArray(f.soloHideProfileIds);
+    const hasNewShow = Array.isArray(f.soloAlwaysShowProfileIds);
+
+    if (!hasNewHide) {
+      if (f.hideSoloPlayed) {
+        const legacyIds = Array.isArray(f.soloProfileIds) && f.soloProfileIds.length
+          ? f.soloProfileIds
+          : getActiveProfileFallbackIds();
+        f.soloHideProfileIds = legacyIds;
+      } else {
+        f.soloHideProfileIds = [];
+      }
+    }
+
+    if (!hasNewShow) f.soloAlwaysShowProfileIds = [];
+
+    const alwaysShowIds = uniqueProfileIds(f.soloAlwaysShowProfileIds);
+    const alwaysShowSet = new Set(alwaysShowIds);
+    f.soloAlwaysShowProfileIds = alwaysShowIds;
+    f.soloHideProfileIds = uniqueProfileIds(f.soloHideProfileIds)
+      .filter((profileId) => !alwaysShowSet.has(profileId));
+
+    delete f.hideSoloPlayed;
+    delete f.soloProfileIds;
+    return f;
+  }
+
   function normalizeFiltersForCompare(filters) {
-    const f = { ...DEFAULTS, ...JSON.parse(JSON.stringify(filters || {})) };
+    const f = {
+      ...DEFAULTS,
+      ...normalizeLegacySoloFilters(JSON.parse(JSON.stringify(filters || {})))
+    };
     if (Array.isArray(f.filterChannel)) {
       f.filterChannel = [...f.filterChannel].sort((a, b) =>
+        String(a).localeCompare(String(b))
+      );
+    }
+    if (Array.isArray(f.soloHideProfileIds)) {
+      f.soloHideProfileIds = [...f.soloHideProfileIds].sort((a, b) =>
+        String(a).localeCompare(String(b))
+      );
+    }
+    if (Array.isArray(f.soloAlwaysShowProfileIds)) {
+      f.soloAlwaysShowProfileIds = [...f.soloAlwaysShowProfileIds].sort((a, b) =>
         String(a).localeCompare(String(b))
       );
     }
@@ -96,7 +156,6 @@
       filterMinScaled: 'value',
       filterMaxScaled: 'value',
       hidePlayed: 'checked',
-      hideSoloPlayed: 'checked',
       showExcluded: 'checked',
       showExcludedOnly: 'checked'
     };
@@ -116,11 +175,54 @@
       filters.filterChannel = [];
     }
 
+    const soloRules = getSoloRuleProfileIdsFromUI();
+    filters.soloHideProfileIds = soloRules.hideProfileIds;
+    filters.soloAlwaysShowProfileIds = soloRules.alwaysShowProfileIds;
+
     return filters;
   }
 
+  function getSoloRuleProfileIdsFromUI() {
+    const hideProfileIds = [];
+    const alwaysShowProfileIds = [];
+    document
+      .querySelectorAll('#soloVisibilityRules input[type="radio"]:checked')
+      .forEach((input) => {
+        if (input.value === 'hide') hideProfileIds.push(input.dataset.profileId);
+        if (input.value === 'show') alwaysShowProfileIds.push(input.dataset.profileId);
+      });
+
+    return {
+      hideProfileIds: uniqueProfileIds(hideProfileIds),
+      alwaysShowProfileIds: uniqueProfileIds(alwaysShowProfileIds)
+    };
+  }
+
+  function applySoloRuleProfileIdsToUI(filters) {
+    const normalized = normalizeLegacySoloFilters(filters || {});
+    const hideIds = new Set(normalized.soloHideProfileIds);
+    const alwaysShowIds = new Set(normalized.soloAlwaysShowProfileIds);
+    document
+      .querySelectorAll('#soloVisibilityRules input[type="radio"]')
+      .forEach((input) => {
+        const profileId = input.dataset.profileId;
+        let value = 'default';
+        if (alwaysShowIds.has(profileId)) value = 'show';
+        else if (hideIds.has(profileId)) value = 'hide';
+        input.checked = input.value === value;
+      });
+  }
+
+  function getSoloRulesForFiltering() {
+    const rules = getSoloRuleProfileIdsFromUI();
+    return {
+      hideProfileIds: rules.hideProfileIds,
+      alwaysShowProfileIds: rules.alwaysShowProfileIds
+    };
+  }
+
   function applyFiltersToUI(filters) {
-    const f = filters || {};
+    const f = normalizeLegacySoloFilters(filters || {});
 
     const map = {
       filterTitleIncludes: 'value',
@@ -132,7 +234,6 @@
       filterMinScaled: 'value',
       filterMaxScaled: 'value',
       hidePlayed: 'checked',
-      hideSoloPlayed: 'checked',
       showExcluded: 'checked',
       showExcludedOnly: 'checked'
     };
@@ -150,16 +251,19 @@
         opt.selected = f.filterChannel.includes(opt.value);
       });
     }
+
+    applySoloRuleProfileIdsToUI(f);
   }
 
   function loadCurrentFiltersFromStorage() {
-    const saved = safeJsonParse(localStorage.getItem(CURRENT_FILTERS_KEY) || '{}', {});
+    const raw = localStorage.getItem(CURRENT_FILTERS_KEY);
+    const saved = safeJsonParse(raw || '{}', {});
     // Ensure missing keys fall back to defaults
-    return { ...DEFAULTS, ...saved };
+    return { ...DEFAULTS, ...normalizeLegacySoloFilters(saved) };
   }
 
   function saveCurrentFiltersToStorage(filters) {
-    localStorage.setItem(CURRENT_FILTERS_KEY, JSON.stringify(filters || {}));
+    localStorage.setItem(CURRENT_FILTERS_KEY, JSON.stringify(normalizeLegacySoloFilters(filters || {})));
     updateFilterSetStatus();
   }
 
@@ -184,7 +288,7 @@
     const showExcluded = !!getEl('showExcluded')?.checked;
     const showExcludedOnly = !!getEl('showExcludedOnly')?.checked;
     const hidePlayed = !!getEl('hidePlayed')?.checked;
-    const hideSoloPlayed = !!getEl('hideSoloPlayed')?.checked;
+    const soloRules = getSoloRulesForFiltering();
 
     const selectedChannels = Array.from(
       getEl('filterChannel')?.selectedOptions || []
@@ -218,7 +322,7 @@
 
       // Played behavior
       if (hidePlayed && _isPlayed(id)) return false;
-      if (hideSoloPlayed && _isSoloPlayed(id)) return false;
+      if (_isSoloPlayed(id, soloRules)) return false;
 
       // Channel filter
       if (selectedChannels.length && !selectedChannels.includes(video.channel_id))
@@ -259,7 +363,11 @@
   // ---------- filter sets ----------
   function loadFilterSets() {
     const raw = safeJsonParse(localStorage.getItem(FILTER_SETS_KEY) || '[]', []);
-    return Array.isArray(raw) ? raw : [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map((set) => ({
+      ...set,
+      filters: { ...DEFAULTS, ...normalizeLegacySoloFilters(set?.filters || {}) }
+    }));
   }
 
   function saveFilterSets(sets) {
@@ -484,7 +592,8 @@
     }, 200);
 
     // "input" is great for text/number
-    const filterInputs = document.querySelectorAll('.filters input, .filters select');
+    const filterInputs = Array.from(document.querySelectorAll('.filters input, .filters select'))
+      .filter((el) => !el.closest('.list-data-card, #soloVisibilityRules'));
     filterInputs.forEach((el) => el.addEventListener('input', debouncedRender));
 
     // Some elements (select + checkboxes) are more reliable with change
@@ -503,7 +612,7 @@
       });
     }
 
-    ['hidePlayed', 'hideSoloPlayed', 'showExcluded', 'showExcludedOnly'].forEach((id) => {
+    ['hidePlayed', 'showExcluded', 'showExcludedOnly'].forEach((id) => {
       const el = getEl(id);
       if (!el) return;
       el.addEventListener('change', () => {
