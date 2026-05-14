@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <header class="app-topbar" aria-label="History toolbar">
+  <header class="app-topbar history-topbar" aria-label="History toolbar">
     <div class="brand-block">
       <span class="brand-mark" aria-hidden="true">見</span>
       <h1 class="brand-title">Video History</h1>
@@ -25,12 +25,43 @@
 
     <div class="topbar-divider" aria-hidden="true"></div>
 
-    <div class="topbar-group">
-      <button id="downloadPlayed" class="btn btn-sm btn-app" type="button">Download Played</button>
-      <label class="btn btn-sm btn-app mb-0" for="uploadPlayed">Import Played</label>
+    <div class="topbar-group history-actions">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Download
+        </button>
+        <ul class="dropdown-menu">
+          <li><button class="dropdown-item" id="downloadPlayed" type="button">Played videos</button></li>
+          <li><button class="dropdown-item" id="downloadProfileWatched" type="button">Profile watched data</button></li>
+        </ul>
+      </div>
+      <div class="dropdown">
+        <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Import
+        </button>
+        <ul class="dropdown-menu">
+          <li><label class="dropdown-item mb-0" for="uploadPlayed">Played JSON</label></li>
+          <li><label class="dropdown-item mb-0" id="uploadProfileWatchedLabel" for="uploadProfileWatched">Profile watched JSON</label></li>
+        </ul>
+      </div>
       <input class="d-none" type="file" id="uploadPlayed" accept=".json">
+      <input class="d-none" type="file" id="uploadProfileWatched" accept=".json">
     </div>
   </header>
+
+  <div class="history-subbar" aria-label="History time and profile controls">
+    <div class="history-subbar-inner">
+      <div class="topbar-group history-profile-actions">
+        <div class="dropdown">
+          <button class="btn btn-sm btn-app dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+            Profiles
+          </button>
+          <div id="historyProfileControls" class="dropdown-menu history-profile-menu" aria-label="History profiles"></div>
+        </div>
+      </div>
+      <div id="profileStatsGroup" class="topbar-group history-profile-stats" aria-label="Selected profile played time"></div>
+    </div>
+  </div>
 
   <main class="history-layout">
     <section class="chart-grid" aria-label="Study charts">

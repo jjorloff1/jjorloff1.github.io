@@ -153,6 +153,43 @@ a:hover {
   flex: 0 0 auto;
 }
 
+.history-topbar {
+  flex-wrap: nowrap;
+  padding-right: max(0.85rem, calc((100vw - 1500px) / 2 + 0.85rem));
+  padding-left: max(0.85rem, calc((100vw - 1500px) / 2 + 0.85rem));
+}
+
+.history-actions {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  width: 210px;
+}
+
+.history-subbar {
+  position: sticky;
+  top: 58px;
+  z-index: 45;
+  padding: 0.48rem 0.85rem;
+  border-bottom: 1px solid rgba(200, 189, 173, 0.72);
+  background: rgba(255, 250, 241, 0.93);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+}
+
+.history-subbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: min(100%, 1500px);
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.history-profile-actions {
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
 .topbar-grow {
   flex: 1 0 1rem;
 }
@@ -229,6 +266,76 @@ a:hover {
 .count-chip .label {
   color: var(--muted);
   font-weight: 750;
+}
+
+.history-profile-stats {
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.08rem;
+}
+
+.history-profile-stats::-webkit-scrollbar {
+  height: 5px;
+}
+
+.history-profile-stats::-webkit-scrollbar-thumb {
+  background: rgba(101, 113, 116, 0.28);
+  border-radius: 999px;
+}
+
+.profile-stat-chip {
+  flex: 0 0 auto;
+  border-color: var(--profile-color);
+  border-left-width: 4px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.68)),
+    var(--surface-raised);
+}
+
+.profile-stat-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.profile-stat-group + .profile-stat-group {
+  margin-left: 0.28rem;
+  padding-left: 0.78rem;
+}
+
+.profile-stat-group + .profile-stat-group::before {
+  content: "";
+  position: absolute;
+  top: 0.18rem;
+  bottom: 0.18rem;
+  left: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.profile-stat-name {
+  max-width: 8rem;
+  overflow: hidden;
+  color: var(--profile-color);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-stat-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
 }
 
 .count-chip.played {
@@ -773,6 +880,49 @@ a:hover {
   margin: 0;
 }
 
+.history-profile-menu {
+  min-width: 13rem;
+  padding: 0.55rem;
+  border-color: var(--border);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-soft);
+}
+
+.history-profile-menu-title {
+  margin: 0 0 0.38rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.history-profile-check {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-height: 1.75rem;
+  margin: 0;
+  padding: 0.14rem 0.18rem;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.history-profile-check .form-check-input {
+  flex: 0 0 auto;
+  float: none;
+  margin: 0;
+}
+
+.history-profile-swatch {
+  flex: 0 0 auto;
+  width: 0.68rem;
+  height: 0.68rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 3px rgba(43, 42, 39, 0.12);
+}
+
 .action-pill {
   display: inline-flex;
   align-items: center;
@@ -1031,6 +1181,33 @@ iframe {
   gap: 1rem;
 }
 
+.history-entry-card .card-actions {
+  grid-template-columns: 1fr;
+}
+
+.history-entry-card.profile-entry {
+  border-left: 5px solid var(--profile-color);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(255, 247, 235, 0.94)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.16), transparent 8rem);
+}
+
+.status-badge.history-profile-badge {
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-profile-meta {
+  color: var(--profile-color);
+  font-weight: 850;
+}
+
+.history-profile-action {
+  color: #ffffff;
+}
+
 canvas {
   width: 100% !important;
   height: 320px !important;
@@ -1131,6 +1308,17 @@ canvas {
   .app-layout,
   .history-layout {
     padding: 0.65rem;
+  }
+
+  .history-subbar {
+    position: static;
+    padding-right: 0.65rem;
+    padding-left: 0.65rem;
+  }
+
+  .history-subbar-inner {
+    padding-right: 0;
+    padding-left: 0;
   }
 
   .filter-rail {
