@@ -13,10 +13,18 @@
     { id: 'naomi', name: 'Naomi' },
     { id: 'titus', name: 'Titus' }
   ];
+  const CACHE_UNINITIALIZED = Symbol('cache-uninitialized');
+
+  let playedMapCache = CACHE_UNINITIALIZED;
+  let excludedMapCache = CACHE_UNINITIALIZED;
+  let soloWatchedByProfileCache = CACHE_UNINITIALIZED;
+  let soloProfilesCache = CACHE_UNINITIALIZED;
 
   function safeParseObject(key, fallback) {
     try {
-      const parsed = JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+      const raw = localStorage.getItem(key);
+      if (raw == null || raw === '') return fallback;
+      const parsed = JSON.parse(raw);
       return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
     } catch {
       return fallback;
@@ -25,11 +33,21 @@
 
   function safeParseArray(key, fallback) {
     try {
-      const parsed = JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+      const raw = localStorage.getItem(key);
+      if (raw == null || raw === '') return fallback;
+      const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : fallback;
     } catch {
       return fallback;
     }
+  }
+
+  function normalizeObjectMap(map) {
+    return map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+  }
+
+  function cloneObjectMap(map) {
+    return { ...normalizeObjectMap(map) };
   }
 
   function normalizeProfile(profile) {
@@ -41,16 +59,23 @@
   }
 
   function getSoloProfiles() {
+    if (soloProfilesCache !== CACHE_UNINITIALIZED) return soloProfilesCache;
+
     const stored = safeParseArray(SOLO_PROFILES_KEY, []);
     const profiles = stored.map(normalizeProfile).filter(Boolean);
-    if (profiles.length) return profiles;
+    if (profiles.length) {
+      soloProfilesCache = profiles;
+      return soloProfilesCache;
+    }
+
     setSoloProfiles(DEFAULT_SOLO_PROFILES);
-    return DEFAULT_SOLO_PROFILES.slice();
+    return soloProfilesCache;
   }
 
   function setSoloProfiles(profiles) {
     const normalized = (profiles || []).map(normalizeProfile).filter(Boolean);
     localStorage.setItem(SOLO_PROFILES_KEY, JSON.stringify(normalized));
+    soloProfilesCache = normalized.length ? normalized : CACHE_UNINITIALIZED;
   }
 
   function getValidSoloProfileIds(profileIds) {
@@ -151,15 +176,27 @@
   }
 
   function getSoloWatchedByProfileMap() {
-    return safeParseObject(SOLO_WATCHED_BY_PROFILE_KEY, {});
+    if (soloWatchedByProfileCache === CACHE_UNINITIALIZED) {
+      soloWatchedByProfileCache = safeParseObject(SOLO_WATCHED_BY_PROFILE_KEY, {});
+    }
+    return soloWatchedByProfileCache;
   }
 
   function normalizeSoloPlayedMap(map) {
-    return map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+    return normalizeObjectMap(map);
+  }
+
+  function cloneSoloWatchedByProfileMap(map) {
+    return Object.entries(normalizeObjectMap(map)).reduce((acc, [profileId, played]) => {
+      acc[profileId] = cloneObjectMap(played);
+      return acc;
+    }, {});
   }
 
   function setSoloWatchedByProfileMap(map) {
-    localStorage.setItem(SOLO_WATCHED_BY_PROFILE_KEY, JSON.stringify(map || {}));
+    const normalized = cloneSoloWatchedByProfileMap(map);
+    localStorage.setItem(SOLO_WATCHED_BY_PROFILE_KEY, JSON.stringify(normalized));
+    soloWatchedByProfileCache = normalized;
   }
 
   function deleteSoloProfile(profileId) {
@@ -169,7 +206,7 @@
     const nextProfiles = profiles.filter((profile) => profile.id !== profileId);
     if (nextProfiles.length === profiles.length) return false;
 
-    const watched = getSoloWatchedByProfileMap();
+    const watched = { ...getSoloWatchedByProfileMap() };
     delete watched[profileId];
     setSoloWatchedByProfileMap(watched);
     setSoloProfiles(nextProfiles);
@@ -216,15 +253,16 @@
   }
 
   function getPlayedMap() {
-    try {
-      return JSON.parse(localStorage.getItem(PLAYED_KEY) || '{}');
-    } catch {
-      return {};
+    if (playedMapCache === CACHE_UNINITIALIZED) {
+      playedMapCache = safeParseObject(PLAYED_KEY, {});
     }
+    return playedMapCache;
   }
 
   function setPlayedMap(map) {
-    localStorage.setItem(PLAYED_KEY, JSON.stringify(map || {}));
+    const normalized = cloneObjectMap(map);
+    localStorage.setItem(PLAYED_KEY, JSON.stringify(normalized));
+    playedMapCache = normalized;
   }
 
   function isPlayed(videoId) {
@@ -233,17 +271,19 @@
   }
 
   function markPlayed(videoId, extra) {
-    const played = getPlayedMap();
-    played[videoId] = {
-      played: true,
-      timestamp: new Date().toISOString(),
-      ...(extra || {})
+    const played = {
+      ...getPlayedMap(),
+      [videoId]: {
+        played: true,
+        timestamp: new Date().toISOString(),
+        ...(extra || {})
+      }
     };
     setPlayedMap(played);
   }
 
   function unmarkPlayed(videoId) {
-    const played = getPlayedMap();
+    const played = { ...getPlayedMap() };
     delete played[videoId];
     setPlayedMap(played);
   }
@@ -284,8 +324,10 @@
 
   function setSoloPlayedMap(map, profileId) {
     const targetProfileId = profileId || getActiveSoloProfileId();
-    const watched = getSoloWatchedByProfileMap();
-    watched[targetProfileId] = map || {};
+    const watched = {
+      ...getSoloWatchedByProfileMap(),
+      [targetProfileId]: cloneObjectMap(map)
+    };
     setSoloWatchedByProfileMap(watched);
   }
 
@@ -295,56 +337,65 @@
   }
 
   function isSoloPlayedByAnyProfile(videoId, profileIds) {
+    const watched = getSoloWatchedByProfileMap();
     return getEffectiveSoloVisibilityProfileIds(profileIds).some((profileId) =>
-      isSoloPlayed(videoId, profileId)
+      !!normalizeSoloPlayedMap(watched[profileId])[videoId]
     );
   }
 
   function markSoloPlayed(videoId, extra, profileId) {
     const targetProfileId = profileId || getActiveSoloProfileId();
-    const soloPlayed = getSoloPlayedMap(targetProfileId);
-    soloPlayed[videoId] = {
-      played: true,
-      timestamp: new Date().toISOString(),
-      ...(extra || {})
+    const soloPlayed = {
+      ...getSoloPlayedMap(targetProfileId),
+      [videoId]: {
+        played: true,
+        timestamp: new Date().toISOString(),
+        ...(extra || {})
+      }
     };
     setSoloPlayedMap(soloPlayed, targetProfileId);
   }
 
   function unmarkSoloPlayed(videoId, profileId) {
     const targetProfileId = profileId || getActiveSoloProfileId();
-    const soloPlayed = getSoloPlayedMap(targetProfileId);
+    const soloPlayed = { ...getSoloPlayedMap(targetProfileId) };
     delete soloPlayed[videoId];
     setSoloPlayedMap(soloPlayed, targetProfileId);
   }
 
   function getSoloWatchers(videoId, profileIds) {
-    const profilesById = getSoloProfiles().reduce((acc, profile) => {
+    const profiles = getSoloProfiles();
+    const watched = getSoloWatchedByProfileMap();
+    const profilesById = profiles.reduce((acc, profile) => {
       acc[profile.id] = profile;
       return acc;
     }, {});
     const ids = Array.isArray(profileIds)
       ? getEffectiveSoloVisibilityProfileIds(profileIds)
-      : getSoloProfiles().map((profile) => profile.id);
+      : profiles.map((profile) => profile.id);
     return ids
-      .filter((profileId) => profilesById[profileId] && isSoloPlayed(videoId, profileId))
+      .filter((profileId) =>
+        profilesById[profileId] &&
+        !!normalizeSoloPlayedMap(watched[profileId])[videoId]
+      )
       .map((profileId) => profilesById[profileId]);
   }
 
   function getSoloWatcherProfileIds(videoId) {
+    const watched = getSoloWatchedByProfileMap();
     return getSoloProfiles()
       .map((profile) => profile.id)
-      .filter((profileId) => isSoloPlayed(videoId, profileId));
+      .filter((profileId) => !!normalizeSoloPlayedMap(watched[profileId])[videoId]);
   }
 
   function setSoloWatcherProfileIds(videoId, profileIds) {
     if (!videoId) return;
     const nextIds = new Set(getValidSoloProfileIds(profileIds));
-    const watched = getSoloWatchedByProfileMap();
+    const watched = { ...getSoloWatchedByProfileMap() };
     const now = new Date().toISOString();
 
     getSoloProfiles().forEach((profile) => {
-      const map = normalizeSoloPlayedMap(watched[profile.id]);
+      const map = cloneObjectMap(watched[profile.id]);
       if (nextIds.has(profile.id)) {
         if (!map[videoId]) {
           map[videoId] = { played: true, timestamp: now };
@@ -441,9 +492,9 @@
         !Array.isArray(data.watchedByProfile[id])
       );
       mergeImportedProfiles(data.profiles, incomingIds);
-      const watched = getSoloWatchedByProfileMap();
+      const watched = { ...getSoloWatchedByProfileMap() };
       incomingIds.forEach((id) => {
-        watched[id] = normalizeSoloPlayedMap(data.watchedByProfile[id]);
+        watched[id] = cloneObjectMap(data.watchedByProfile[id]);
       });
       setSoloWatchedByProfileMap(watched);
       return { type: 'bundle', profileIds: incomingIds };
@@ -481,7 +532,7 @@
     const legacy = safeParseObject(SOLO_PLAYED_KEY, {});
     const legacyIds = Object.keys(legacy);
     if (legacyIds.length) {
-      const watched = getSoloWatchedByProfileMap();
+      const watched = { ...getSoloWatchedByProfileMap() };
       const existing = watched.jesse && typeof watched.jesse === 'object' ? watched.jesse : {};
       watched.jesse = { ...legacy, ...existing };
       setSoloWatchedByProfileMap(watched);
@@ -492,15 +543,16 @@
 
   // ===== Excluded videos =====
   function getExcludedMap() {
-    try {
-      return JSON.parse(localStorage.getItem(EXCLUDED_KEY) || '{}');
-    } catch {
-      return {};
+    if (excludedMapCache === CACHE_UNINITIALIZED) {
+      excludedMapCache = safeParseObject(EXCLUDED_KEY, {});
     }
+    return excludedMapCache;
   }
 
   function setExcludedMap(map) {
-    localStorage.setItem(EXCLUDED_KEY, JSON.stringify(map || {}));
+    const normalized = cloneObjectMap(map);
+    localStorage.setItem(EXCLUDED_KEY, JSON.stringify(normalized));
+    excludedMapCache = normalized;
   }
 
   function isExcluded(videoId) {
@@ -509,13 +561,12 @@
   }
 
   function markExcluded(videoId) {
-    const excluded = getExcludedMap();
-    excluded[videoId] = true;
+    const excluded = { ...getExcludedMap(), [videoId]: true };
     setExcludedMap(excluded);
   }
 
   function unmarkExcluded(videoId) {
-    const excluded = getExcludedMap();
+    const excluded = { ...getExcludedMap() };
     delete excluded[videoId];
     setExcludedMap(excluded);
   }
@@ -555,6 +606,28 @@
     };
     reader.readAsText(file);
   }
+
+  function invalidateCachedStorage(event) {
+    if (event?.storageArea && event.storageArea !== localStorage) return;
+
+    if (event?.key == null) {
+      playedMapCache = CACHE_UNINITIALIZED;
+      excludedMapCache = CACHE_UNINITIALIZED;
+      soloWatchedByProfileCache = CACHE_UNINITIALIZED;
+      soloProfilesCache = CACHE_UNINITIALIZED;
+      return;
+    }
+
+    if (event.key === PLAYED_KEY) playedMapCache = CACHE_UNINITIALIZED;
+    else if (event.key === EXCLUDED_KEY) excludedMapCache = CACHE_UNINITIALIZED;
+    else if (event.key === SOLO_WATCHED_BY_PROFILE_KEY) {
+      soloWatchedByProfileCache = CACHE_UNINITIALIZED;
+    } else if (event.key === SOLO_PROFILES_KEY) {
+      soloProfilesCache = CACHE_UNINITIALIZED;
+    }
+  }
+
+  window.addEventListener?.('storage', invalidateCachedStorage);
 
   window.Storage = {
     PLAYED_KEY,
