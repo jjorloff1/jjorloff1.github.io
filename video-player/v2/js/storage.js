@@ -2,6 +2,7 @@
 (function () {
   const PLAYED_KEY = 'playedVideos';
   const EXCLUDED_KEY = 'excludedVideos';
+  const RESUME_KEY = 'resumePositions';
   const SOLO_PLAYED_KEY = 'soloPlayedVideos';
   const SOLO_PROFILES_KEY = 'soloProfiles';
   const ACTIVE_SOLO_PROFILE_KEY = 'activeSoloProfileId';
@@ -17,6 +18,7 @@
 
   let playedMapCache = CACHE_UNINITIALIZED;
   let excludedMapCache = CACHE_UNINITIALIZED;
+  let resumeMapCache = CACHE_UNINITIALIZED;
   let soloWatchedByProfileCache = CACHE_UNINITIALIZED;
   let soloProfilesCache = CACHE_UNINITIALIZED;
 
@@ -312,6 +314,38 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  // ===== Resume positions =====
+  function getResumeMap() {
+    if (resumeMapCache === CACHE_UNINITIALIZED) {
+      resumeMapCache = safeParseObject(RESUME_KEY, {});
+    }
+    return resumeMapCache;
+  }
+
+  function setResumeMap(map) {
+    const normalized = cloneObjectMap(map);
+    localStorage.setItem(RESUME_KEY, JSON.stringify(normalized));
+    resumeMapCache = normalized;
+  }
+
+  function getResumePosition(videoId) {
+    return getResumeMap()[videoId] || null;
+  }
+
+  function setResumePosition(videoId, seconds, duration) {
+    const resume = {
+      ...getResumeMap(),
+      [videoId]: { seconds, duration, timestamp: new Date().toISOString() }
+    };
+    setResumeMap(resume);
+  }
+
+  function clearResumePosition(videoId) {
+    const resume = { ...getResumeMap() };
+    delete resume[videoId];
+    setResumeMap(resume);
   }
 
   // ===== Solo Played videos =====
@@ -613,6 +647,7 @@
     if (event?.key == null) {
       playedMapCache = CACHE_UNINITIALIZED;
       excludedMapCache = CACHE_UNINITIALIZED;
+      resumeMapCache = CACHE_UNINITIALIZED;
       soloWatchedByProfileCache = CACHE_UNINITIALIZED;
       soloProfilesCache = CACHE_UNINITIALIZED;
       return;
@@ -620,6 +655,7 @@
 
     if (event.key === PLAYED_KEY) playedMapCache = CACHE_UNINITIALIZED;
     else if (event.key === EXCLUDED_KEY) excludedMapCache = CACHE_UNINITIALIZED;
+    else if (event.key === RESUME_KEY) resumeMapCache = CACHE_UNINITIALIZED;
     else if (event.key === SOLO_WATCHED_BY_PROFILE_KEY) {
       soloWatchedByProfileCache = CACHE_UNINITIALIZED;
     } else if (event.key === SOLO_PROFILES_KEY) {
@@ -638,6 +674,13 @@
     unmarkPlayed,
     downloadPlayedJson,
     uploadPlayedJsonFile,
+
+    RESUME_KEY,
+    getResumeMap,
+    setResumeMap,
+    getResumePosition,
+    setResumePosition,
+    clearResumePosition,
 
     SOLO_PLAYED_KEY,
     SOLO_PROFILES_KEY,

@@ -47,6 +47,11 @@
     return `${m}:${pad2(r)}`;
   }
 
+  function secondsToTimestamp(totalSeconds) {
+    const seconds = Math.max(0, parseInt(totalSeconds, 10) || 0);
+    return seconds < 3600 ? secondsToMSS(seconds) : secondsToHMS(seconds);
+  }
+
   window.Time = {
     pad2,
     startOfDay,
@@ -54,6 +59,7 @@
     startOfISOWeek,
     secondsToHMS,
     secondsToHM,
-    secondsToMSS
+    secondsToMSS,
+    secondsToTimestamp
   };
 })();

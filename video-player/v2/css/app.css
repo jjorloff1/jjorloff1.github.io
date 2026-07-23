@@ -1101,6 +1101,31 @@ iframe {
   font-weight: 750;
 }
 
+.resume-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.82);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.resume-toast-dismiss {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .played-toggle {
   display: inline-flex;
   align-items: center;

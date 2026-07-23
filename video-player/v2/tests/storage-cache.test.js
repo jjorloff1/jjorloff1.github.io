@@ -6,6 +6,7 @@ const { loadStorage, plain } = require('./storage-test-harness');
 const KEYS = {
   played: 'playedVideos',
   excluded: 'excludedVideos',
+  resume: 'resumePositions',
   profiles: 'soloProfiles',
   watched: 'soloWatchedByProfile'
 };
@@ -237,6 +238,66 @@ test('storage events invalidate only the affected cache and null invalidates all
   assert.equal(localStorage.readCount(KEYS.excluded), 1);
   assert.equal(localStorage.readCount(KEYS.profiles), 1);
   assert.equal(localStorage.readCount(KEYS.watched), 1);
+});
+
+test('resume positions hydrate from storage and support get/set/clear', () => {
+  const harness = loadStorage({
+    ...baseState(),
+    [KEYS.resume]: JSON.stringify({
+      existing: { seconds: 120, duration: 600, timestamp: '2026-01-01T00:00:00.000Z' }
+    })
+  });
+  const { Storage, localStorage } = harness;
+  harness.resetMetrics();
+
+  assert.deepEqual(plain(Storage.getResumePosition('existing')), {
+    seconds: 120,
+    duration: 600,
+    timestamp: '2026-01-01T00:00:00.000Z'
+  });
+  assert.equal(Storage.getResumePosition('missing'), null);
+  assert.equal(localStorage.readCount(KEYS.resume), 1);
+
+  Storage.setResumePosition('new', 45, 300);
+  const saved = Storage.getResumePosition('new');
+  assert.equal(saved.seconds, 45);
+  assert.equal(saved.duration, 300);
+  assert.equal(typeof saved.timestamp, 'string');
+  assert.equal(Storage.getResumePosition('existing').seconds, 120);
+
+  Storage.clearResumePosition('existing');
+  assert.equal(Storage.getResumePosition('existing'), null);
+  assert.equal(Storage.getResumePosition('new').seconds, 45);
+});
+
+test('malformed resume position value falls back to an empty map', () => {
+  const harness = loadStorage({ ...baseState(), [KEYS.resume]: 'not json' });
+  const { Storage } = harness;
+
+  assert.deepEqual(plain(Storage.getResumeMap()), {});
+  assert.equal(Storage.getResumePosition('anything'), null);
+});
+
+test('resume position storage events invalidate only the resume cache', () => {
+  const harness = loadStorage({
+    ...baseState(),
+    [KEYS.resume]: JSON.stringify({ a: { seconds: 10, duration: 100 } })
+  });
+  const { Storage, window, localStorage } = harness;
+
+  Storage.getResumePosition('a');
+  Storage.getPlayedMap();
+  harness.resetMetrics();
+
+  localStorage.externalSet(
+    KEYS.resume,
+    JSON.stringify({ a: { seconds: 200, duration: 100 } })
+  );
+  window.dispatchStorageEvent({ key: KEYS.resume, storageArea: localStorage });
+
+  assert.equal(Storage.getResumePosition('a').seconds, 200);
+  assert.equal(localStorage.readCount(KEYS.resume), 1);
+  assert.equal(localStorage.readCount(KEYS.played), 0);
 });
 
 test('legacy solo history migration updates persistence and the watched cache', () => {
